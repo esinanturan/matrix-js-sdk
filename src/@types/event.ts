@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { NamespacedValue, UnstableValue } from "../NamespacedValue";
+import { NamespacedValue, UnstableValue } from "../NamespacedValue.ts";
 import {
     PolicyRuleEventContent,
     RoomAvatarEventContent,
@@ -34,16 +34,12 @@ import {
     RoomTopicEventContent,
     SpaceChildEventContent,
     SpaceParentEventContent,
-} from "./state_events";
-import {
-    ExperimentalGroupCallRoomMemberState,
-    IGroupCallRoomMemberState,
-    IGroupCallRoomState,
-} from "../webrtc/groupCall";
-import { MSC3089EventContent } from "../models/MSC3089Branch";
-import { M_BEACON, M_BEACON_INFO, MBeaconEventContent, MBeaconInfoEventContent } from "./beacon";
-import { XOR } from "./common";
-import { ReactionEventContent, RoomMessageEventContent, StickerEventContent } from "./events";
+} from "./state_events.ts";
+import { IGroupCallRoomMemberState, IGroupCallRoomState } from "../webrtc/groupCall.ts";
+import { MSC3089EventContent } from "../models/MSC3089Branch.ts";
+import { M_BEACON, M_BEACON_INFO, MBeaconEventContent, MBeaconInfoEventContent } from "./beacon.ts";
+import { XOR } from "./common.ts";
+import { ReactionEventContent, RoomMessageEventContent, StickerEventContent } from "./events.ts";
 import {
     MCallAnswer,
     MCallBase,
@@ -54,10 +50,14 @@ import {
     MCallSelectAnswer,
     SDPStreamMetadata,
     SDPStreamMetadataKey,
-} from "../webrtc/callEventTypes";
-import { EncryptionKeysEventContent, ICallNotifyContent } from "../matrixrtc/types";
-import { M_POLL_END, M_POLL_START, PollEndEventContent, PollStartEventContent } from "./polls";
-import { SessionMembershipData } from "../matrixrtc/CallMembership";
+} from "../webrtc/callEventTypes.ts";
+import { EncryptionKeysEventContent, ICallNotifyContent } from "../matrixrtc/types.ts";
+import { M_POLL_END, M_POLL_START, PollEndEventContent, PollStartEventContent } from "./polls.ts";
+import { SessionMembershipData } from "../matrixrtc/CallMembership.ts";
+import { LocalNotificationSettings } from "./local_notifications.ts";
+import { IPushRules } from "./PushRules.ts";
+import { SecretInfo, SecretStorageKeyDescription } from "../secret-storage.ts";
+import { POLICIES_ACCOUNT_EVENT_TYPE } from "../models/invites-ignorer-types.ts";
 
 export enum EventType {
     // Room state events
@@ -357,14 +357,44 @@ export interface StateEvents {
 
     // MSC3401
     [EventType.GroupCallPrefix]: IGroupCallRoomState;
-    [EventType.GroupCallMemberPrefix]: XOR<
-        XOR<IGroupCallRoomMemberState, ExperimentalGroupCallRoomMemberState>,
-        XOR<SessionMembershipData, {}>
-    >;
+    [EventType.GroupCallMemberPrefix]: XOR<IGroupCallRoomMemberState, XOR<SessionMembershipData, {}>>;
 
     // MSC3089
     [UNSTABLE_MSC3089_BRANCH.name]: MSC3089EventContent;
 
     // MSC3672
     [M_BEACON_INFO.name]: MBeaconInfoEventContent;
+}
+
+/**
+ * Mapped type from event type to content type for all specified global account_data events.
+ */
+export interface AccountDataEvents extends SecretStorageAccountDataEvents {
+    [EventType.PushRules]: IPushRules;
+    [EventType.Direct]: { [userId: string]: string[] };
+    [EventType.IgnoredUserList]: { [userId: string]: {} };
+    "m.secret_storage.default_key": { key: string };
+    // Flag set by the rust SDK (Element X) and also used by us to mark that the user opted out of backup
+    // (I don't know why it's m.org.matrix...)
+    "m.org.matrix.custom.backup_disabled": { disabled: boolean };
+    "m.identity_server": { base_url: string | null };
+    [key: `${typeof LOCAL_NOTIFICATION_SETTINGS_PREFIX.name}.${string}`]: LocalNotificationSettings;
+    [key: `m.secret_storage.key.${string}`]: SecretStorageKeyDescription;
+
+    // Invites-ignorer events
+    [POLICIES_ACCOUNT_EVENT_TYPE.name]: { [key: string]: any };
+    [POLICIES_ACCOUNT_EVENT_TYPE.altName]: { [key: string]: any };
+}
+
+/**
+ * Mapped type from event type to content type for all specified global events encrypted by secret storage.
+ *
+ * See https://spec.matrix.org/v1.13/client-server-api/#msecret_storagev1aes-hmac-sha2-1
+ */
+export interface SecretStorageAccountDataEvents {
+    "m.megolm_backup.v1": SecretInfo;
+    "m.cross_signing.master": SecretInfo;
+    "m.cross_signing.self_signing": SecretInfo;
+    "m.cross_signing.user_signing": SecretInfo;
+    "org.matrix.msc3814": SecretInfo;
 }

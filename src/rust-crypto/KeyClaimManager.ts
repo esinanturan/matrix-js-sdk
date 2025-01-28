@@ -16,8 +16,8 @@ limitations under the License.
 
 import { OlmMachine, UserId } from "@matrix-org/matrix-sdk-crypto-wasm";
 
-import { OutgoingRequestProcessor } from "./OutgoingRequestProcessor";
-import { LogSpan } from "../logger";
+import { OutgoingRequestProcessor } from "./OutgoingRequestProcessor.ts";
+import { LogSpan } from "../logger.ts";
 
 /**
  * KeyClaimManager: linearises calls to OlmMachine.getMissingSessions to avoid races
@@ -50,7 +50,7 @@ export class KeyClaimManager {
      * Given a list of users, attempt to ensure that we have Olm Sessions active with each of their devices
      *
      * If we don't have an active olm session, we will claim a one-time key and start one.
-     *
+     * @param logger - logger to use
      * @param userList - list of userIDs to claim
      */
     public ensureSessionsForUsers(logger: LogSpan, userList: Array<UserId>): Promise<void> {

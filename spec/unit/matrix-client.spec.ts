@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import { Mocked, mocked } from "jest-mock";
+import fetchMock from "fetch-mock-jest";
 
 import { logger } from "../../src/logger";
 import { ClientEvent, IMatrixClientCreateOpts, ITurnServerResponse, MatrixClient, Store } from "../../src/client";
@@ -76,6 +77,7 @@ import { SecretStorageKeyDescriptionAesV1, ServerSideSecretStorageImpl } from ".
 import { CryptoBackend } from "../../src/common-crypto/CryptoBackend";
 import { KnownMembership } from "../../src/@types/membership";
 import { RoomMessageEventContent } from "../../src/@types/events";
+import { mockOpenIdConfiguration } from "../test-utils/oidc.ts";
 
 jest.useFakeTimers();
 
@@ -94,6 +96,12 @@ function convertQueryDictToMap(queryDict?: QueryDict): Map<string, string> {
     return new Map(Object.entries(queryDict).map(([k, v]) => [k, String(v)]));
 }
 
+declare module "../../src/@types/event" {
+    interface AccountDataEvents {
+        "im.vector.test": {};
+    }
+}
+
 type HttpLookup = {
     method: string;
     path: string;
@@ -102,7 +110,7 @@ type HttpLookup = {
     error?: object;
     expectBody?: Record<string, any>;
     expectQueryParams?: QueryDict;
-    thenCall?: Function;
+    thenCall?: () => void;
 };
 
 interface Options extends ICreateRoomOpts {
@@ -259,13 +267,17 @@ describe("MatrixClient", function () {
 
             if (next.error) {
                 // eslint-disable-next-line
-                return Promise.reject({
-                    errcode: (<MatrixError>next.error).errcode,
-                    httpStatus: (<MatrixError>next.error).httpStatus,
-                    name: (<MatrixError>next.error).errcode,
-                    message: "Expected testing error",
-                    data: next.error,
-                });
+                return Promise.reject(
+                    new MatrixError(
+                        {
+                            errcode: (<MatrixError>next.error).errcode,
+                            name: (<MatrixError>next.error).errcode,
+                            message: "Expected testing error",
+                            data: next.error,
+                        },
+                        (<MatrixError>next.error).httpStatus,
+                    ),
+                );
             }
             return Promise.resolve(next.data);
         }
@@ -403,7 +415,7 @@ describe("MatrixClient", function () {
         async function assertRequestsMade(
             responses: {
                 prefix?: string;
-                error?: { httpStatus: Number; errcode: string };
+                error?: { httpStatus: number; errcode: string };
                 data?: { event_id: string };
             }[],
             expectRejects = false,
@@ -1029,6 +1041,124 @@ describe("MatrixClient", function () {
         });
     });
 
+    describe("extended profiles", () => {
+        const unstableMSC4133Prefix = `${ClientPrefix.Unstable}/uk.tcpip.msc4133`;
+        const userId = "@profile_user:example.org";
+
+        beforeEach(() => {
+            unstableFeatures["uk.tcpip.msc4133"] = true;
+        });
+
+        it("throws when unsupported by server", async () => {
+            unstableFeatures["uk.tcpip.msc4133"] = false;
+            const errorMessage = "Server does not support extended profiles";
+
+            await expect(client.doesServerSupportExtendedProfiles()).resolves.toEqual(false);
+
+            await expect(client.getExtendedProfile(userId)).rejects.toThrow(errorMessage);
+            await expect(client.getExtendedProfileProperty(userId, "test_key")).rejects.toThrow(errorMessage);
+            await expect(client.setExtendedProfileProperty("test_key", "foo")).rejects.toThrow(errorMessage);
+            await expect(client.deleteExtendedProfileProperty("test_key")).rejects.toThrow(errorMessage);
+            await expect(client.patchExtendedProfile({ test_key: "foo" })).rejects.toThrow(errorMessage);
+            await expect(client.setExtendedProfile({ test_key: "foo" })).rejects.toThrow(errorMessage);
+        });
+
+        it("can fetch a extended user profile", async () => {
+            const testProfile = {
+                test_key: "foo",
+            };
+            httpLookups = [
+                {
+                    method: "GET",
+                    prefix: unstableMSC4133Prefix,
+                    path: "/profile/" + encodeURIComponent(userId),
+                    data: testProfile,
+                },
+            ];
+            await expect(client.getExtendedProfile(userId)).resolves.toEqual(testProfile);
+            expect(httpLookups).toHaveLength(0);
+        });
+
+        it("can fetch a property from a extended user profile", async () => {
+            const testProfile = {
+                test_key: "foo",
+            };
+            httpLookups = [
+                {
+                    method: "GET",
+                    prefix: unstableMSC4133Prefix,
+                    path: "/profile/" + encodeURIComponent(userId) + "/test_key",
+                    data: testProfile,
+                },
+            ];
+            await expect(client.getExtendedProfileProperty(userId, "test_key")).resolves.toEqual("foo");
+            expect(httpLookups).toHaveLength(0);
+        });
+
+        it("can set a property in our extended profile", async () => {
+            httpLookups = [
+                {
+                    method: "PUT",
+                    prefix: unstableMSC4133Prefix,
+                    path: "/profile/" + encodeURIComponent(client.credentials.userId!) + "/test_key",
+                    expectBody: {
+                        test_key: "foo",
+                    },
+                },
+            ];
+            await expect(client.setExtendedProfileProperty("test_key", "foo")).resolves.toEqual(undefined);
+            expect(httpLookups).toHaveLength(0);
+        });
+
+        it("can delete a property in our extended profile", async () => {
+            httpLookups = [
+                {
+                    method: "DELETE",
+                    prefix: unstableMSC4133Prefix,
+                    path: "/profile/" + encodeURIComponent(client.credentials.userId!) + "/test_key",
+                },
+            ];
+            await expect(client.deleteExtendedProfileProperty("test_key")).resolves.toEqual(undefined);
+            expect(httpLookups).toHaveLength(0);
+        });
+
+        it("can patch our extended profile", async () => {
+            const testProfile = {
+                test_key: "foo",
+            };
+            const patchedProfile = {
+                existing: "key",
+                test_key: "foo",
+            };
+            httpLookups = [
+                {
+                    method: "PATCH",
+                    prefix: unstableMSC4133Prefix,
+                    path: "/profile/" + encodeURIComponent(client.credentials.userId!),
+                    data: patchedProfile,
+                    expectBody: testProfile,
+                },
+            ];
+            await expect(client.patchExtendedProfile(testProfile)).resolves.toEqual(patchedProfile);
+        });
+
+        it("can replace our extended profile", async () => {
+            const testProfile = {
+                test_key: "foo",
+            };
+            httpLookups = [
+                {
+                    method: "PUT",
+                    prefix: unstableMSC4133Prefix,
+                    path: "/profile/" + encodeURIComponent(client.credentials.userId!),
+                    data: testProfile,
+                    expectBody: testProfile,
+                },
+            ];
+            await expect(client.setExtendedProfile(testProfile)).resolves.toEqual(undefined);
+        });
+    });
+
     it("should create (unstable) file trees", async () => {
         const userId = "@test:example.org";
         const roomId = "!room:example.org";
@@ -1397,7 +1527,7 @@ describe("MatrixClient", function () {
     });
 
     describe("emitted sync events", function () {
-        function syncChecker(expectedStates: [string, string | null][], done: Function) {
+        function syncChecker(expectedStates: [string, string | null][], done: () => void) {
             return function syncListener(state: SyncState, old: SyncState | null) {
                 const expected = expectedStates.shift();
                 logger.log("'sync' curr=%s old=%s EXPECT=%s", state, old, expected);
@@ -1419,7 +1549,7 @@ describe("MatrixClient", function () {
         it("should transition null -> PREPARED after the first /sync", async () => {
             const expectedStates: [string, string | null][] = [];
             expectedStates.push(["PREPARED", null]);
-            const didSyncPromise = new Promise((resolve) => {
+            const didSyncPromise = new Promise<void>((resolve) => {
                 client.on(ClientEvent.Sync, syncChecker(expectedStates, resolve));
             });
             await client.startClient();
@@ -1436,7 +1566,7 @@ describe("MatrixClient", function () {
                 error: { errcode: "NOPE_NOPE_NOPE" },
             });
             expectedStates.push(["ERROR", null]);
-            const didSyncPromise = new Promise((resolve) => {
+            const didSyncPromise = new Promise<void>((resolve) => {
                 client.on(ClientEvent.Sync, syncChecker(expectedStates, resolve));
             });
             await client.startClient();
@@ -1476,7 +1606,7 @@ describe("MatrixClient", function () {
             expectedStates.push(["RECONNECTING", null]);
             expectedStates.push(["ERROR", "RECONNECTING"]);
             expectedStates.push(["CATCHUP", "ERROR"]);
-            const didSyncPromise = new Promise((resolve) => {
+            const didSyncPromise = new Promise<void>((resolve) => {
                 client.on(ClientEvent.Sync, syncChecker(expectedStates, resolve));
             });
             await client.startClient();
@@ -1487,7 +1617,7 @@ describe("MatrixClient", function () {
             const expectedStates: [string, string | null][] = [];
             expectedStates.push(["PREPARED", null]);
             expectedStates.push(["SYNCING", "PREPARED"]);
-            const didSyncPromise = new Promise((resolve) => {
+            const didSyncPromise = new Promise<void>((resolve) => {
                 client.on(ClientEvent.Sync, syncChecker(expectedStates, resolve));
             });
             await client.startClient();
@@ -1512,7 +1642,7 @@ describe("MatrixClient", function () {
             expectedStates.push(["SYNCING", "PREPARED"]);
             expectedStates.push(["RECONNECTING", "SYNCING"]);
             expectedStates.push(["ERROR", "RECONNECTING"]);
-            const didSyncPromise = new Promise((resolve) => {
+            const didSyncPromise = new Promise<void>((resolve) => {
                 client.on(ClientEvent.Sync, syncChecker(expectedStates, resolve));
             });
             await client.startClient();
@@ -1531,7 +1661,7 @@ describe("MatrixClient", function () {
             expectedStates.push(["PREPARED", null]);
             expectedStates.push(["SYNCING", "PREPARED"]);
             expectedStates.push(["ERROR", "SYNCING"]);
-            const didSyncPromise = new Promise((resolve) => {
+            const didSyncPromise = new Promise<void>((resolve) => {
                 client.on(ClientEvent.Sync, syncChecker(expectedStates, resolve));
             });
             await client.startClient();
@@ -1546,7 +1676,7 @@ describe("MatrixClient", function () {
             expectedStates.push(["PREPARED", null]);
             expectedStates.push(["SYNCING", "PREPARED"]);
             expectedStates.push(["SYNCING", "SYNCING"]);
-            const didSyncPromise = new Promise((resolve) => {
+            const didSyncPromise = new Promise<void>((resolve) => {
                 client.on(ClientEvent.Sync, syncChecker(expectedStates, resolve));
             });
             await client.startClient();
@@ -1577,7 +1707,7 @@ describe("MatrixClient", function () {
             expectedStates.push(["RECONNECTING", "SYNCING"]);
             expectedStates.push(["ERROR", "RECONNECTING"]);
             expectedStates.push(["ERROR", "ERROR"]);
-            const didSyncPromise = new Promise((resolve) => {
+            const didSyncPromise = new Promise<void>((resolve) => {
                 client.on(ClientEvent.Sync, syncChecker(expectedStates, resolve));
             });
             await client.startClient();
@@ -2681,24 +2811,28 @@ describe("MatrixClient", function () {
                         roomCreateEvent(room1.roomId, replacedByCreate1.roomId),
                         predecessorEvent(room1.roomId, replacedByDynamicPredecessor1.roomId),
                     ],
-                    {},
+                    { addToState: true },
                 );
                 room2.addLiveEvents(
                     [
                         roomCreateEvent(room2.roomId, replacedByCreate2.roomId),
                         predecessorEvent(room2.roomId, replacedByDynamicPredecessor2.roomId),
                     ],
-                    {},
+                    { addToState: true },
                 );
-                replacedByCreate1.addLiveEvents([tombstoneEvent(room1.roomId, replacedByCreate1.roomId)], {});
-                replacedByCreate2.addLiveEvents([tombstoneEvent(room2.roomId, replacedByCreate2.roomId)], {});
+                replacedByCreate1.addLiveEvents([tombstoneEvent(room1.roomId, replacedByCreate1.roomId)], {
+                    addToState: true,
+                });
+                replacedByCreate2.addLiveEvents([tombstoneEvent(room2.roomId, replacedByCreate2.roomId)], {
+                    addToState: true,
+                });
                 replacedByDynamicPredecessor1.addLiveEvents(
                     [tombstoneEvent(room1.roomId, replacedByDynamicPredecessor1.roomId)],
-                    {},
+                    { addToState: true },
                 );
                 replacedByDynamicPredecessor2.addLiveEvents(
                     [tombstoneEvent(room2.roomId, replacedByDynamicPredecessor2.roomId)],
-                    {},
+                    { addToState: true },
                 );
 
                 return {
@@ -2736,10 +2870,10 @@ describe("MatrixClient", function () {
                 const room2 = new Room("room2", client, "@daryl:alexandria.example.com");
                 client.store = new StubStore();
                 client.store.getRooms = () => [room1, replacedRoom1, replacedRoom2, room2];
-                room1.addLiveEvents([roomCreateEvent(room1.roomId, replacedRoom1.roomId)], {});
-                room2.addLiveEvents([roomCreateEvent(room2.roomId, replacedRoom2.roomId)], {});
-                replacedRoom1.addLiveEvents([tombstoneEvent(room1.roomId, replacedRoom1.roomId)], {});
-                replacedRoom2.addLiveEvents([tombstoneEvent(room2.roomId, replacedRoom2.roomId)], {});
+                room1.addLiveEvents([roomCreateEvent(room1.roomId, replacedRoom1.roomId)], { addToState: true });
+                room2.addLiveEvents([roomCreateEvent(room2.roomId, replacedRoom2.roomId)], { addToState: true });
+                replacedRoom1.addLiveEvents([tombstoneEvent(room1.roomId, replacedRoom1.roomId)], { addToState: true });
+                replacedRoom2.addLiveEvents([tombstoneEvent(room2.roomId, replacedRoom2.roomId)], { addToState: true });
 
                 // When we ask for the visible rooms
                 const rooms = client.getVisibleRooms();
@@ -2819,15 +2953,15 @@ describe("MatrixClient", function () {
                 const room4 = new Room("room4", client, "@michonne:hawthorne.example.com");
 
                 if (creates) {
-                    room2.addLiveEvents([roomCreateEvent(room2.roomId, room1.roomId)]);
-                    room3.addLiveEvents([roomCreateEvent(room3.roomId, room2.roomId)]);
-                    room4.addLiveEvents([roomCreateEvent(room4.roomId, room3.roomId)]);
+                    room2.addLiveEvents([roomCreateEvent(room2.roomId, room1.roomId)], { addToState: true });
+                    room3.addLiveEvents([roomCreateEvent(room3.roomId, room2.roomId)], { addToState: true });
+                    room4.addLiveEvents([roomCreateEvent(room4.roomId, room3.roomId)], { addToState: true });
                 }
 
                 if (tombstones) {
-                    room1.addLiveEvents([tombstoneEvent(room2.roomId, room1.roomId)], {});
-                    room2.addLiveEvents([tombstoneEvent(room3.roomId, room2.roomId)], {});
-                    room3.addLiveEvents([tombstoneEvent(room4.roomId, room3.roomId)], {});
+                    room1.addLiveEvents([tombstoneEvent(room2.roomId, room1.roomId)], { addToState: true });
+                    room2.addLiveEvents([tombstoneEvent(room3.roomId, room2.roomId)], { addToState: true });
+                    room3.addLiveEvents([tombstoneEvent(room4.roomId, room3.roomId)], { addToState: true });
                 }
 
                 mocked(store.getRoom).mockImplementation((roomId: string) => {
@@ -2862,17 +2996,17 @@ describe("MatrixClient", function () {
                 const dynRoom4 = new Room("dynRoom4", client, "@rick:grimes.example.com");
                 const dynRoom5 = new Room("dynRoom5", client, "@rick:grimes.example.com");
 
-                dynRoom1.addLiveEvents([tombstoneEvent(dynRoom2.roomId, dynRoom1.roomId)], {});
-                dynRoom2.addLiveEvents([predecessorEvent(dynRoom2.roomId, dynRoom1.roomId)]);
+                dynRoom1.addLiveEvents([tombstoneEvent(dynRoom2.roomId, dynRoom1.roomId)], { addToState: true });
+                dynRoom2.addLiveEvents([predecessorEvent(dynRoom2.roomId, dynRoom1.roomId)], { addToState: true });
 
-                dynRoom2.addLiveEvents([tombstoneEvent(room3.roomId, dynRoom2.roomId)], {});
-                room3.addLiveEvents([predecessorEvent(room3.roomId, dynRoom2.roomId)]);
+                dynRoom2.addLiveEvents([tombstoneEvent(room3.roomId, dynRoom2.roomId)], { addToState: true });
+                room3.addLiveEvents([predecessorEvent(room3.roomId, dynRoom2.roomId)], { addToState: true });
 
-                room3.addLiveEvents([tombstoneEvent(dynRoom4.roomId, room3.roomId)], {});
-                dynRoom4.addLiveEvents([predecessorEvent(dynRoom4.roomId, room3.roomId)]);
+                room3.addLiveEvents([tombstoneEvent(dynRoom4.roomId, room3.roomId)], { addToState: true });
+                dynRoom4.addLiveEvents([predecessorEvent(dynRoom4.roomId, room3.roomId)], { addToState: true });
 
-                dynRoom4.addLiveEvents([tombstoneEvent(dynRoom5.roomId, dynRoom4.roomId)], {});
-                dynRoom5.addLiveEvents([predecessorEvent(dynRoom5.roomId, dynRoom4.roomId)]);
+                dynRoom4.addLiveEvents([tombstoneEvent(dynRoom5.roomId, dynRoom4.roomId)], { addToState: true });
+                dynRoom5.addLiveEvents([predecessorEvent(dynRoom5.roomId, dynRoom4.roomId)], { addToState: true });
 
                 mocked(store.getRoom)
                     .mockClear()
@@ -3357,6 +3491,63 @@ describe("MatrixClient", function () {
             ];
 
             await expect(client.getAuthIssuer()).resolves.toEqual({ issuer: "https://issuer/" });
+            expect(httpLookups.length).toEqual(0);
+        });
+    });
+
+    describe("getAuthMetadata", () => {
+        beforeEach(() => {
+            fetchMock.mockReset();
+            // This request is made by oidc-client-ts so is not intercepted by httpLookups
+            fetchMock.get("https://auth.org/jwks", {
+                status: 200,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                keys: [],
+            });
+        });
+
+        it("should use unstable prefix", async () => {
+            const metadata = mockOpenIdConfiguration();
+            httpLookups = [
+                {
+                    method: "GET",
+                    path: `/auth_metadata`,
+                    data: metadata,
+                    prefix: "/_matrix/client/unstable/org.matrix.msc2965",
+                },
+            ];
+
+            await expect(client.getAuthMetadata()).resolves.toEqual({
+                ...metadata,
+                signingKeys: [],
+            });
+            expect(httpLookups.length).toEqual(0);
+        });
+
+        it("should fall back to auth_issuer + openid-configuration", async () => {
+            const metadata = mockOpenIdConfiguration();
+            httpLookups = [
+                {
+                    method: "GET",
+                    path: `/auth_metadata`,
+                    error: new MatrixError({ errcode: "M_UNRECOGNIZED" }, 404),
+                    prefix: "/_matrix/client/unstable/org.matrix.msc2965",
+                },
+                {
+                    method: "GET",
+                    path: `/auth_issuer`,
+                    data: { issuer: metadata.issuer },
+                    prefix: "/_matrix/client/unstable/org.matrix.msc2965",
+                },
+            ];
+            fetchMock.get("https://auth.org/.well-known/openid-configuration", metadata);
+
+            await expect(client.getAuthMetadata()).resolves.toEqual({
+                ...metadata,
+                signingKeys: [],
+            });
             expect(httpLookups.length).toEqual(0);
         });
     });

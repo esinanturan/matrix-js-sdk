@@ -14,7 +14,16 @@ module.exports = {
                 modules: process.env.NODE_ENV === "test" ? "commonjs" : false,
             },
         ],
-        "@babel/preset-typescript",
+        [
+            "@babel/preset-typescript",
+            {
+                // When using the transpiled javascript in `lib`, Node.js requires `.js` extensions on any `import`
+                // specifiers. However, Jest uses the TS source (via babel) and fails to resolve the `.js` names.
+                // To resolve this,we use the `.ts` names in the source, and rewrite the `import` specifiers to use
+                // `.js` during transpilation, *except* when we are targetting Jest.
+                rewriteImportExtensions: process.env.NODE_ENV !== "test",
+            },
+        ],
     ],
     plugins: [
         "@babel/plugin-transform-numeric-separator",
@@ -22,5 +31,22 @@ module.exports = {
         "@babel/plugin-transform-object-rest-spread",
         "@babel/plugin-syntax-dynamic-import",
         "@babel/plugin-transform-runtime",
+        [
+            "search-and-replace",
+            {
+                // Since rewriteImportExtensions doesn't work on dynamic imports (yet), we need to manually replace
+                // the dynamic rust-crypto import.
+                // (see https://github.com/babel/babel/issues/16750)
+                rules:
+                    process.env.NODE_ENV !== "test"
+                        ? [
+                              {
+                                  search: "./rust-crypto/index.ts",
+                                  replace: "./rust-crypto/index.js",
+                              },
+                          ]
+                        : [],
+            },
+        ],
     ],
 };

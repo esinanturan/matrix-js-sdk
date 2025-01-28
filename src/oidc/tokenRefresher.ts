@@ -16,10 +16,10 @@ limitations under the License.
 
 import { IdTokenClaims, OidcClient, WebStorageStateStore } from "oidc-client-ts";
 
-import { AccessTokens } from "../http-api";
-import { generateScope } from "./authorize";
-import { discoverAndValidateOIDCIssuerWellKnown } from "./discovery";
-import { logger } from "../logger";
+import { AccessTokens } from "../http-api/index.ts";
+import { generateScope } from "./authorize.ts";
+import { discoverAndValidateOIDCIssuerWellKnown } from "./discovery.ts";
+import { logger } from "../logger.ts";
 
 /**
  * @experimental
@@ -77,11 +77,12 @@ export class OidcTokenRefresher {
             const scope = generateScope(deviceId);
 
             this.oidcClient = new OidcClient({
-                ...config.metadata,
+                metadata: config,
+                signingKeys: config.signingKeys ?? undefined,
                 client_id: clientId,
                 scope,
                 redirect_uri: redirectUri,
-                authority: config.metadata.issuer,
+                authority: config.issuer,
                 stateStore: new WebStorageStateStore({ prefix: "mx_oidc_", store: window.sessionStorage }),
             });
         } catch (error) {

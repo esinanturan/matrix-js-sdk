@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { Logger, logger } from "../../logger";
-import { deepCompare } from "../../utils";
+import { Logger, logger } from "../../logger.ts";
+import { deepCompare } from "../../utils.ts";
 import {
     CryptoStore,
     IDeviceData,
@@ -31,13 +31,13 @@ import {
     SecretStorePrivateKeys,
     SESSION_BATCH_SIZE,
     ACCOUNT_OBJECT_KEY_MIGRATION_STATE,
-} from "./base";
-import { IRoomKeyRequestBody, IRoomKeyRequestRecipient } from "../index";
-import { IOlmDevice } from "../algorithms/megolm";
-import { IRoomEncryption } from "../RoomList";
-import { InboundGroupSessionData } from "../OlmDevice";
-import { IndexedDBCryptoStore } from "./indexeddb-crypto-store";
-import { CrossSigningKeyInfo } from "../../crypto-api";
+} from "./base.ts";
+import { IRoomKeyRequestBody, IRoomKeyRequestRecipient } from "../index.ts";
+import { IOlmDevice } from "../algorithms/megolm.ts";
+import { IRoomEncryption } from "../RoomList.ts";
+import { InboundGroupSessionData } from "../OlmDevice.ts";
+import { IndexedDBCryptoStore } from "./indexeddb-crypto-store.ts";
+import { CrossSigningKeyInfo } from "../../crypto-api/index.ts";
 
 const PROFILE_TRANSACTIONS = false;
 
@@ -776,7 +776,7 @@ export class Backend implements CryptoStore {
                 ev.preventDefault();
                 logger.log("Ignoring duplicate inbound group session: " + senderCurve25519Key + " / " + sessionId);
             } else {
-                abortWithException(txn, new Error("Failed to add inbound group session: " + addReq.error));
+                abortWithException(txn, new Error("Failed to add inbound group session: " + addReq.error?.name));
             }
         };
     }
@@ -1216,7 +1216,7 @@ function abortWithException(txn: IDBTransaction, e: Error): void {
     (txn as IWrappedIDBTransaction)._mx_abortexception = e;
     try {
         txn.abort();
-    } catch (e) {
+    } catch {
         // sometimes we won't be able to abort the transaction
         // (ie. if it's aborted or completed)
     }

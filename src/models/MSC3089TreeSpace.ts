@@ -16,11 +16,11 @@ limitations under the License.
 
 import promiseRetry from "p-retry";
 
-import { MatrixClient } from "../client";
-import { EventType, MsgType, UNSTABLE_MSC3089_BRANCH, UNSTABLE_MSC3089_LEAF } from "../@types/event";
-import { Room } from "./room";
-import { logger } from "../logger";
-import { IContent, MatrixEvent } from "./event";
+import { MatrixClient } from "../client.ts";
+import { EventType, MsgType, UNSTABLE_MSC3089_BRANCH, UNSTABLE_MSC3089_LEAF } from "../@types/event.ts";
+import { Room } from "./room.ts";
+import { logger } from "../logger.ts";
+import { IContent, MatrixEvent } from "./event.ts";
 import {
     averageBetweenStrings,
     DEFAULT_ALPHABET,
@@ -28,14 +28,13 @@ import {
     nextString,
     prevString,
     simpleRetryOperation,
-} from "../utils";
-import { MSC3089Branch } from "./MSC3089Branch";
-import { isRoomSharedHistory } from "../crypto/algorithms/megolm";
-import { ISendEventResponse } from "../@types/requests";
-import { FileType } from "../http-api";
-import { KnownMembership } from "../@types/membership";
-import { RoomPowerLevelsEventContent, SpaceChildEventContent } from "../@types/state_events";
-import type { EncryptedFile, FileContent } from "../@types/media";
+} from "../utils.ts";
+import { MSC3089Branch } from "./MSC3089Branch.ts";
+import { ISendEventResponse } from "../@types/requests.ts";
+import { FileType } from "../http-api/index.ts";
+import { KnownMembership } from "../@types/membership.ts";
+import { RoomPowerLevelsEventContent, SpaceChildEventContent } from "../@types/state_events.ts";
+import type { EncryptedFile, FileContent } from "../@types/media.ts";
 
 /**
  * The recommended defaults for a tree space's power levels. Note that this
@@ -136,28 +135,14 @@ export class MSC3089TreeSpace {
      * @param userId - The user ID to invite.
      * @param andSubspaces - True (default) to invite the user to all
      * directories/subspaces too, recursively.
-     * @param shareHistoryKeys - True (default) to share encryption keys
-     * with the invited user. This will allow them to decrypt the events (files)
-     * in the tree. Keys will not be shared if the room is lacking appropriate
-     * history visibility (by default, history visibility is "shared" in trees,
-     * which is an appropriate visibility for these purposes).
      * @returns Promise which resolves when complete.
      */
-    public async invite(userId: string, andSubspaces = true, shareHistoryKeys = true): Promise<void> {
+    public async invite(userId: string, andSubspaces = true): Promise<void> {
         const promises: Promise<void>[] = [this.retryInvite(userId)];
         if (andSubspaces) {
-            promises.push(...this.getDirectories().map((d) => d.invite(userId, andSubspaces, shareHistoryKeys)));
+            promises.push(...this.getDirectories().map((d) => d.invite(userId, andSubspaces)));
         }
-        return Promise.all(promises).then(() => {
-            // Note: key sharing is default on because for file trees it is relatively important that the invite
-            // target can actually decrypt the files. The implied use case is that by inviting a user to the tree
-            // it means the sender would like the receiver to view/download the files contained within, much like
-            // sharing a folder in other circles.
-            if (shareHistoryKeys && isRoomSharedHistory(this.room)) {
-                // noinspection JSIgnoredPromiseFromCall - we aren't concerned as much if this fails.
-                this.client.sendSharedHistoryKeys(this.roomId, [userId]);
-            }
-        });
+        await Promise.all(promises);
     }
 
     private retryInvite(userId: string): Promise<void> {
