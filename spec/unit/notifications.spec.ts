@@ -19,7 +19,7 @@ import { Feature, ServerSupport } from "../../src/feature";
 import {
     EventType,
     fixNotificationCountOnDecryption,
-    MatrixClient,
+    type MatrixClient,
     MatrixEvent,
     MsgType,
     NotificationCountType,
@@ -27,7 +27,7 @@ import {
     Room,
     RoomEvent,
 } from "../../src/matrix";
-import { IActionsObject } from "../../src/pushprocessor";
+import { type IActionsObject } from "../../src/pushprocessor";
 import { ReEmitter } from "../../src/ReEmitter";
 import { getMockClientWithEventEmitter, mockClientMethodsUser } from "../test-utils/client";
 import { mkEvent, mock } from "../test-utils/test-utils";
@@ -106,7 +106,7 @@ describe("fixNotificationCountOnDecryption", () => {
             mockClient,
         );
 
-        room.addLiveEvents([event]);
+        room.addLiveEvents([event], { addToState: false });
 
         THREAD_ID = event.getId()!;
         threadEvent = mkEvent({

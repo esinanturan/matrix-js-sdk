@@ -16,18 +16,24 @@ limitations under the License.
 
 import * as RustSdkCryptoJs from "@matrix-org/matrix-sdk-crypto-wasm";
 
-import { Logger } from "../logger";
-import { CryptoStore, MigrationState, SecretStorePrivateKeys } from "../crypto/store/base";
-import { IndexedDBCryptoStore } from "../crypto/store/indexeddb-crypto-store";
-import { decryptAES, IEncryptedPayload } from "../crypto/aes";
-import { IHttpOpts, MatrixHttpApi } from "../http-api";
-import { requestKeyBackupVersion } from "./backup";
-import { IRoomEncryption } from "../crypto/RoomList";
-import { CrossSigningKeyInfo, Curve25519AuthData } from "../crypto-api";
-import { RustCrypto } from "./rust-crypto";
-import { KeyBackupInfo } from "../crypto-api/keybackup";
-import { sleep } from "../utils";
-import { encodeBase64 } from "../base64";
+import { type Logger } from "../logger.ts";
+import { type CryptoStore, MigrationState, type SecretStorePrivateKeys } from "../crypto/store/base.ts";
+import { IndexedDBCryptoStore } from "../crypto/store/indexeddb-crypto-store.ts";
+import { type IHttpOpts, type MatrixHttpApi } from "../http-api/index.ts";
+import { requestKeyBackupVersion } from "./backup.ts";
+import { type CrossSigningKeyInfo, type Curve25519AuthData } from "../crypto-api/index.ts";
+import { type RustCrypto } from "./rust-crypto.ts";
+import { type KeyBackupInfo } from "../crypto-api/keybackup.ts";
+import { sleep } from "../utils.ts";
+import { encodeBase64 } from "../base64.ts";
+import decryptAESSecretStorageItem from "../utils/decryptAESSecretStorageItem.ts";
+import { type AESEncryptedSecretStoragePayload } from "../@types/AESEncryptedSecretStoragePayload.ts";
+
+interface LegacyRoomEncryption {
+    algorithm: string;
+    rotation_period_ms?: number;
+    rotation_period_msgs?: number;
+}
 
 /**
  * Determine if any data needs migrating from the legacy store, and do so.
@@ -374,7 +380,7 @@ export async function migrateRoomSettingsFromLegacyCrypto({
         return;
     }
 
-    let rooms: Record<string, IRoomEncryption> = {};
+    let rooms: Record<string, LegacyRoomEncryption> = {};
 
     await legacyStore.doTxn("readwrite", [IndexedDBCryptoStore.STORE_ROOMS], (txn) => {
         legacyStore.getEndToEndRooms(txn, (result) => {
@@ -421,7 +427,7 @@ async function getAndDecryptCachedSecretKey(
     });
 
     if (key && key.ciphertext && key.iv && key.mac) {
-        return await decryptAES(key as IEncryptedPayload, legacyPickleKey, name);
+        return await decryptAESSecretStorageItem(key as AESEncryptedSecretStoragePayload, legacyPickleKey, name);
     } else if (key instanceof Uint8Array) {
         // This is a legacy backward compatibility case where the key was stored in clear.
         return encodeBase64(key);

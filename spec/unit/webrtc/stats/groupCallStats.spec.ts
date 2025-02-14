@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 import { GroupCallStats } from "../../../../src/webrtc/stats/groupCallStats";
-import { CallStatsReportSummary } from "../../../../src/webrtc/stats/callStatsReportSummary";
+import { type CallStatsReportSummary } from "../../../../src/webrtc/stats/callStatsReportSummary";
 
 const GROUP_CALL_ID = "GROUP_ID";
 const LOCAL_USER_ID = "LOCAL_USER_ID";
@@ -126,7 +126,7 @@ describe("GroupCallStats", () => {
 
         it("doing nothing if process already running", async () => {
             // @ts-ignore
-            jest.spyOn(global, "setInterval").mockReturnValue(22);
+            jest.spyOn(globalThis, "setInterval").mockReturnValue(22);
             stats.start();
             expect(setInterval).toHaveBeenCalledTimes(1);
             stats.start();
@@ -146,8 +146,8 @@ describe("GroupCallStats", () => {
         });
         it("finish stats process if was started", async () => {
             // @ts-ignore
-            jest.spyOn(global, "setInterval").mockReturnValue(22);
-            jest.spyOn(global, "clearInterval");
+            jest.spyOn(globalThis, "setInterval").mockReturnValue(22);
+            jest.spyOn(globalThis, "clearInterval");
             stats.start();
             expect(setInterval).toHaveBeenCalledTimes(1);
             stats.stop();
@@ -155,7 +155,7 @@ describe("GroupCallStats", () => {
         });
 
         it("do nothing if stats process was not started", async () => {
-            jest.spyOn(global, "clearInterval");
+            jest.spyOn(globalThis, "clearInterval");
             stats.stop();
             expect(clearInterval).not.toHaveBeenCalled();
         });

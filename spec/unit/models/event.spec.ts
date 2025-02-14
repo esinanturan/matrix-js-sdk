@@ -14,21 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { MockedObject } from "jest-mock";
+import { type MockedObject } from "jest-mock";
 
 import { MatrixEvent, MatrixEventEvent } from "../../../src/models/event";
 import { emitPromise } from "../../test-utils/test-utils";
-import { Crypto, IEventDecryptionResult } from "../../../src/crypto";
 import {
-    IAnnotatedPushRule,
-    MatrixClient,
+    type IAnnotatedPushRule,
+    type MatrixClient,
     PushRuleActionName,
     Room,
     THREAD_RELATION_TYPE,
     TweakName,
 } from "../../../src";
 import { DecryptionFailureCode } from "../../../src/crypto-api";
-import { DecryptionError } from "../../../src/common-crypto/CryptoBackend";
+import {
+    type CryptoBackend,
+    DecryptionError,
+    type EventDecryptionResult,
+} from "../../../src/common-crypto/CryptoBackend";
 
 describe("MatrixEvent", () => {
     it("should create copies of itself", () => {
@@ -99,7 +102,7 @@ describe("MatrixEvent", () => {
             const room = new Room("!roomid:e.xyz", mockClient, "myname");
             const ev = createEvent("$event1:server");
 
-            await room.addLiveEvents([ev]);
+            await room.addLiveEvents([ev], { addToState: false });
             await room.createThreadsTimelineSets();
             expect(ev.threadRootId).toBeUndefined();
             expect(mainTimelineLiveEventIds(room)).toEqual([ev.getId()]);
@@ -120,7 +123,7 @@ describe("MatrixEvent", () => {
             const threadRoot = createEvent("$threadroot:server");
             const ev = createThreadedEvent("$event1:server", threadRoot.getId()!);
 
-            await room.addLiveEvents([threadRoot, ev]);
+            await room.addLiveEvents([threadRoot, ev], { addToState: false });
             await room.createThreadsTimelineSets();
             expect(threadRoot.threadRootId).toEqual(threadRoot.getId());
             expect(mainTimelineLiveEventIds(room)).toEqual([threadRoot.getId()]);
@@ -143,7 +146,7 @@ describe("MatrixEvent", () => {
             const threadRoot = createEvent("$threadroot:server");
             const ev = createThreadedEvent("$event1:server", threadRoot.getId()!);
 
-            await room.addLiveEvents([threadRoot, ev]);
+            await room.addLiveEvents([threadRoot, ev], { addToState: false });
             await room.createThreadsTimelineSets();
             expect(ev.threadRootId).toEqual(threadRoot.getId());
             expect(mainTimelineLiveEventIds(room)).toEqual([threadRoot.getId()]);
@@ -167,7 +170,7 @@ describe("MatrixEvent", () => {
             const ev = createThreadedEvent("$event1:server", threadRoot.getId()!);
             const reaction = createReactionEvent("$reaction:server", ev.getId()!);
 
-            await room.addLiveEvents([threadRoot, ev, reaction]);
+            await room.addLiveEvents([threadRoot, ev, reaction], { addToState: false });
             await room.createThreadsTimelineSets();
             expect(reaction.threadRootId).toEqual(threadRoot.getId());
             expect(mainTimelineLiveEventIds(room)).toEqual([threadRoot.getId()]);
@@ -191,7 +194,7 @@ describe("MatrixEvent", () => {
             const ev = createThreadedEvent("$event1:server", threadRoot.getId()!);
             const edit = createEditEvent("$edit:server", ev.getId()!);
 
-            await room.addLiveEvents([threadRoot, ev, edit]);
+            await room.addLiveEvents([threadRoot, ev, edit], { addToState: false });
             await room.createThreadsTimelineSets();
             expect(edit.threadRootId).toEqual(threadRoot.getId());
             expect(mainTimelineLiveEventIds(room)).toEqual([threadRoot.getId()]);
@@ -217,7 +220,7 @@ describe("MatrixEvent", () => {
             const reply2 = createReplyEvent("$reply2:server", reply1.getId()!);
             const reaction = createReactionEvent("$reaction:server", reply2.getId()!);
 
-            await room.addLiveEvents([threadRoot, ev, reply1, reply2, reaction]);
+            await room.addLiveEvents([threadRoot, ev, reply1, reply2, reaction], { addToState: false });
             await room.createThreadsTimelineSets();
             expect(reaction.threadRootId).toEqual(threadRoot.getId());
             expect(mainTimelineLiveEventIds(room)).toEqual([threadRoot.getId()]);
@@ -369,7 +372,7 @@ describe("MatrixEvent", () => {
             const testError = new Error("test error");
             const crypto = {
                 decryptEvent: jest.fn().mockRejectedValue(testError),
-            } as unknown as Crypto;
+            } as unknown as CryptoBackend;
 
             await encryptedEvent.attemptDecryption(crypto);
             expect(encryptedEvent.isEncrypted()).toBeTruthy();
@@ -391,7 +394,7 @@ describe("MatrixEvent", () => {
             const testError = new DecryptionError(DecryptionFailureCode.MEGOLM_UNKNOWN_INBOUND_SESSION_ID, "uisi");
             const crypto = {
                 decryptEvent: jest.fn().mockRejectedValue(testError),
-            } as unknown as Crypto;
+            } as unknown as CryptoBackend;
 
             await encryptedEvent.attemptDecryption(crypto);
             expect(encryptedEvent.isEncrypted()).toBeTruthy();
@@ -418,7 +421,7 @@ describe("MatrixEvent", () => {
                             "The sender has disabled encrypting to unverified devices.",
                         ),
                     ),
-            } as unknown as Crypto;
+            } as unknown as CryptoBackend;
 
             await encryptedEvent.attemptDecryption(crypto);
             expect(encryptedEvent.isEncrypted()).toBeTruthy();
@@ -453,7 +456,7 @@ describe("MatrixEvent", () => {
                             },
                         });
                     }),
-            } as unknown as Crypto;
+            } as unknown as CryptoBackend;
 
             await encryptedEvent.attemptDecryption(crypto);
 
@@ -478,7 +481,7 @@ describe("MatrixEvent", () => {
 
             const crypto = {
                 decryptEvent: jest.fn().mockImplementationOnce(() => {
-                    return Promise.resolve<IEventDecryptionResult>({
+                    return Promise.resolve<EventDecryptionResult>({
                         clearEvent: {
                             type: "m.room.message",
                             content: {
@@ -491,7 +494,7 @@ describe("MatrixEvent", () => {
                         },
                     });
                 }),
-            } as unknown as Crypto;
+            } as unknown as CryptoBackend;
 
             await encryptedEvent.attemptDecryption(crypto);
             expect(encryptedEvent.getType()).toEqual("m.room.message");

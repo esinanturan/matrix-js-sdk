@@ -17,20 +17,26 @@
  */
 
 import {
-    Curve25519PublicKey,
-    Ed25519PublicKey,
+    CollectStrategy,
+    type Curve25519PublicKey,
+    type Ed25519PublicKey,
     HistoryVisibility as RustHistoryVisibility,
-    IdentityKeys,
-    OlmMachine,
+    type IdentityKeys,
+    type OlmMachine,
 } from "@matrix-org/matrix-sdk-crypto-wasm";
-import { Mocked } from "jest-mock";
+import { type Mocked } from "jest-mock";
 
-import { HistoryVisibility, MatrixEvent, Room, RoomMember } from "../../../src";
+import { HistoryVisibility, type MatrixEvent, type Room, type RoomMember } from "../../../src";
 import { RoomEncryptor, toRustHistoryVisibility } from "../../../src/rust-crypto/RoomEncryptor";
-import { KeyClaimManager } from "../../../src/rust-crypto/KeyClaimManager";
+import { type KeyClaimManager } from "../../../src/rust-crypto/KeyClaimManager";
 import { defer } from "../../../src/utils";
-import { OutgoingRequestsManager } from "../../../src/rust-crypto/OutgoingRequestsManager";
+import { type OutgoingRequestsManager } from "../../../src/rust-crypto/OutgoingRequestsManager";
 import { KnownMembership } from "../../../src/@types/membership";
+import {
+    type DeviceIsolationMode,
+    AllDevicesIsolationMode,
+    OnlySignedDevicesIsolationMode,
+} from "../../../src/crypto-api";
 
 describe("RoomEncryptor", () => {
     describe("History Visibility", () => {
@@ -99,7 +105,7 @@ describe("RoomEncryptor", () => {
                 getEncryptionTargetMembers: jest.fn().mockReturnValue([mockRoomMember]),
                 shouldEncryptForInvitedMembers: jest.fn().mockReturnValue(true),
                 getHistoryVisibility: jest.fn().mockReturnValue(HistoryVisibility.Invited),
-                getBlacklistUnverifiedDevices: jest.fn().mockReturnValue(false),
+                getBlacklistUnverifiedDevices: jest.fn().mockReturnValue(null),
             } as unknown as Mocked<Room>;
 
             roomEncryptor = new RoomEncryptor(
@@ -111,6 +117,8 @@ describe("RoomEncryptor", () => {
             );
         });
 
+        const defaultDevicesIsolationMode = new AllDevicesIsolationMode(false);
+
         it("should ensure that there is only one shareRoomKey at a time", async () => {
             const deferredShare = defer<void>();
             const insideOlmShareRoom = defer<void>();
@@ -118,21 +126,22 @@ describe("RoomEncryptor", () => {
             mockOlmMachine.shareRoomKey.mockImplementationOnce(async () => {
                 insideOlmShareRoom.resolve();
                 await deferredShare.promise;
+                return [];
             });
 
-            roomEncryptor.prepareForEncryption(false);
+            roomEncryptor.prepareForEncryption(false, defaultDevicesIsolationMode);
             await insideOlmShareRoom.promise;
 
             // call several times more
-            roomEncryptor.prepareForEncryption(false);
-            roomEncryptor.encryptEvent(createMockEvent("Hello"), false);
-            roomEncryptor.prepareForEncryption(false);
-            roomEncryptor.encryptEvent(createMockEvent("World"), false);
+            roomEncryptor.prepareForEncryption(false, defaultDevicesIsolationMode);
+            roomEncryptor.encryptEvent(createMockEvent("Hello"), false, defaultDevicesIsolationMode);
+            roomEncryptor.prepareForEncryption(false, defaultDevicesIsolationMode);
+            roomEncryptor.encryptEvent(createMockEvent("World"), false, defaultDevicesIsolationMode);
 
             expect(mockOlmMachine.shareRoomKey).toHaveBeenCalledTimes(1);
 
             deferredShare.resolve();
-            await roomEncryptor.prepareForEncryption(false);
+            await roomEncryptor.prepareForEncryption(false, defaultDevicesIsolationMode);
 
             // should have been called again
             expect(mockOlmMachine.shareRoomKey).toHaveBeenCalledTimes(6);
@@ -143,7 +152,7 @@ describe("RoomEncryptor", () => {
             const firstTargetMembers = defer<void>();
             const secondTargetMembers = defer<void>();
 
-            mockOlmMachine.shareRoomKey.mockResolvedValue(undefined);
+            mockOlmMachine.shareRoomKey.mockResolvedValue([]);
 
             // Hook into this method to demonstrate the race condition
             mockRoom.getEncryptionTargetMembers
@@ -158,8 +167,16 @@ describe("RoomEncryptor", () => {
 
             let firstMessageFinished: string | null = null;
 
-            const firstRequest = roomEncryptor.encryptEvent(createMockEvent("Hello"), false);
-            const secondRequest = roomEncryptor.encryptEvent(createMockEvent("Edit of Hello"), false);
+            const firstRequest = roomEncryptor.encryptEvent(
+                createMockEvent("Hello"),
+                false,
+                defaultDevicesIsolationMode,
+            );
+            const secondRequest = roomEncryptor.encryptEvent(
+                createMockEvent("Edit of Hello"),
+                false,
+                defaultDevicesIsolationMode,
+            );
 
             firstRequest.then(() => {
                 if (firstMessageFinished === null) {
@@ -180,6 +197,98 @@ describe("RoomEncryptor", () => {
             await Promise.all([firstRequest, secondRequest]);
 
             expect(firstMessageFinished).toBe("hello");
+        });
+
+        describe("DeviceIsolationMode", () => {
+            type TestCase = [
+                string,
+                {
+                    mode: DeviceIsolationMode;
+                    expectedStrategy: CollectStrategy;
+                    globalBlacklistUnverifiedDevices: boolean;
+                },
+            ];
+
+            const testCases: TestCase[] = [
+                [
+                    "Share AllDevicesIsolationMode",
+                    {
+                        mode: new AllDevicesIsolationMode(false),
+                        expectedStrategy: CollectStrategy.deviceBasedStrategy(false, false),
+                        globalBlacklistUnverifiedDevices: false,
+                    },
+                ],
+                [
+                    "Share AllDevicesIsolationMode - with blacklist unverified",
+                    {
+                        mode: new AllDevicesIsolationMode(false),
+                        expectedStrategy: CollectStrategy.deviceBasedStrategy(true, false),
+                        globalBlacklistUnverifiedDevices: true,
+                    },
+                ],
+                [
+                    "Share OnlySigned - blacklist true",
+                    {
+                        mode: new OnlySignedDevicesIsolationMode(),
+                        expectedStrategy: CollectStrategy.identityBasedStrategy(),
+                        globalBlacklistUnverifiedDevices: true,
+                    },
+                ],
+                [
+                    "Share OnlySigned",
+                    {
+                        mode: new OnlySignedDevicesIsolationMode(),
+                        expectedStrategy: CollectStrategy.identityBasedStrategy(),
+                        globalBlacklistUnverifiedDevices: false,
+                    },
+                ],
+                [
+                    "Share AllDevicesIsolationMode - Verified user problems true",
+                    {
+                        mode: new AllDevicesIsolationMode(true),
+                        expectedStrategy: CollectStrategy.deviceBasedStrategy(false, true),
+                        globalBlacklistUnverifiedDevices: false,
+                    },
+                ],
+                [
+                    'Share AllDevicesIsolationMode - with blacklist unverified - Verified user problems true"',
+                    {
+                        mode: new AllDevicesIsolationMode(true),
+                        expectedStrategy: CollectStrategy.deviceBasedStrategy(true, true),
+                        globalBlacklistUnverifiedDevices: true,
+                    },
+                ],
+            ];
+
+            let capturedSettings: CollectStrategy | undefined = undefined;
+
+            beforeEach(() => {
+                capturedSettings = undefined;
+                mockOlmMachine.shareRoomKey.mockImplementationOnce(async (roomId, users, encryptionSettings) => {
+                    capturedSettings = encryptionSettings.sharingStrategy;
+                    return [];
+                });
+            });
+
+            it.each(testCases)(
+                "prepareForEncryption should properly set sharing strategy based on crypto mode: %s",
+                async (_, { mode, expectedStrategy, globalBlacklistUnverifiedDevices }) => {
+                    await roomEncryptor.prepareForEncryption(globalBlacklistUnverifiedDevices, mode);
+                    expect(mockOlmMachine.shareRoomKey).toHaveBeenCalled();
+                    expect(capturedSettings).toBeDefined();
+                    expect(expectedStrategy.eq(capturedSettings!)).toBeTruthy();
+                },
+            );
+
+            it.each(testCases)(
+                "encryptEvent should properly set sharing strategy based on crypto mode: %s",
+                async (_, { mode, expectedStrategy, globalBlacklistUnverifiedDevices }) => {
+                    await roomEncryptor.encryptEvent(createMockEvent("Hello"), globalBlacklistUnverifiedDevices, mode);
+                    expect(mockOlmMachine.shareRoomKey).toHaveBeenCalled();
+                    expect(capturedSettings).toBeDefined();
+                    expect(expectedStrategy.eq(capturedSettings!)).toBeTruthy();
+                },
+            );
         });
     });
 });

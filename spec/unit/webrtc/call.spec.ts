@@ -28,9 +28,9 @@ import {
     CallDirection,
 } from "../../../src/webrtc/call";
 import {
-    MCallAnswer,
-    MCallHangupReject,
-    SDPStreamMetadata,
+    type MCallAnswer,
+    type MCallHangupReject,
+    type SDPStreamMetadata,
     SDPStreamMetadataKey,
     SDPStreamMetadataPurpose,
 } from "../../../src/webrtc/callEventTypes";
@@ -46,8 +46,10 @@ import {
     MockRTCRtpSender,
 } from "../../test-utils/webrtc";
 import { CallFeed } from "../../../src/webrtc/callFeed";
-import { EventType, IContent, ISendEventResponse, MatrixEvent, Room } from "../../../src";
+import { EventType, type IContent, type ISendEventResponse, type MatrixEvent, type Room } from "../../../src";
 import { emitPromise } from "../../test-utils/test-utils";
+import type { CryptoApi } from "../../../src/crypto-api";
+import { GroupCallUnknownDeviceError } from "../../../src/webrtc/groupCall";
 
 const FAKE_ROOM_ID = "!foo:bar";
 const CALL_LIFETIME = 60000;
@@ -119,9 +121,9 @@ describe("Call", function () {
     const errorListener = () => {};
 
     beforeEach(function () {
-        prevNavigator = global.navigator;
-        prevDocument = global.document;
-        prevWindow = global.window;
+        prevNavigator = globalThis.navigator;
+        prevDocument = globalThis.document;
+        prevWindow = globalThis.window;
 
         installWebRTCMocks();
 
@@ -159,9 +161,9 @@ describe("Call", function () {
         call.hangup(CallErrorCode.UserHangup, true);
 
         client.stop();
-        global.navigator = prevNavigator;
-        global.window = prevWindow;
-        global.document = prevDocument;
+        globalThis.navigator = prevNavigator;
+        globalThis.window = prevWindow;
+        globalThis.document = prevDocument;
 
         jest.useRealTimers();
     });
@@ -788,17 +790,17 @@ describe("Call", function () {
         });
 
         it("should return false if window or document are undefined", () => {
-            global.window = undefined!;
+            globalThis.window = undefined!;
             expect(supportsMatrixCall()).toBe(false);
-            global.window = prevWindow;
-            global.document = undefined!;
+            globalThis.window = prevWindow;
+            globalThis.document = undefined!;
             expect(supportsMatrixCall()).toBe(false);
         });
 
         it("should return false if RTCPeerConnection throws", () => {
             // @ts-ignore - writing to window as we are simulating browser edge-cases
-            global.window = {};
-            Object.defineProperty(global.window, "RTCPeerConnection", {
+            globalThis.window = {};
+            Object.defineProperty(globalThis.window, "RTCPeerConnection", {
                 get: () => {
                     throw Error("Secure mode, naaah!");
                 },
@@ -810,11 +812,11 @@ describe("Call", function () {
             "should return false if RTCPeerConnection & RTCSessionDescription " +
                 "& RTCIceCandidate & mediaDevices are unavailable",
             () => {
-                global.window.RTCPeerConnection = undefined!;
-                global.window.RTCSessionDescription = undefined!;
-                global.window.RTCIceCandidate = undefined!;
+                globalThis.window.RTCPeerConnection = undefined!;
+                globalThis.window.RTCSessionDescription = undefined!;
+                globalThis.window.RTCIceCandidate = undefined!;
                 // @ts-ignore - writing to a read-only property as we are simulating faulty browsers
-                global.navigator.mediaDevices = undefined;
+                globalThis.navigator.mediaDevices = undefined;
                 expect(supportsMatrixCall()).toBe(false);
             },
         );
@@ -1228,7 +1230,7 @@ describe("Call", function () {
     });
 
     describe("Screen sharing", () => {
-        const waitNegotiateFunc = (resolve: Function): void => {
+        const waitNegotiateFunc = (resolve: () => void): void => {
             mockSendEvent.mockImplementationOnce(() => {
                 // Note that the peer connection here is a dummy one and always returns
                 // dummy SDP, so there's not much point returning the content: the SDP will
@@ -1305,7 +1307,7 @@ describe("Call", function () {
         });
 
         it("removes RTX codec from screen sharing transcievers", async () => {
-            mocked(global.RTCRtpSender.getCapabilities).mockReturnValue({
+            mocked(globalThis.RTCRtpSender.getCapabilities).mockReturnValue({
                 codecs: [
                     { mimeType: "video/rtx", clockRate: 90000 },
                     { mimeType: "video/somethingelse", clockRate: 90000 },
@@ -1816,8 +1818,8 @@ describe("Call", function () {
 
     it("should emit IceFailed error on the successor call if RTCPeerConnection throws", async () => {
         // @ts-ignore - writing to window as we are simulating browser edge-cases
-        global.window = {};
-        Object.defineProperty(global.window, "RTCPeerConnection", {
+        globalThis.window = {};
+        Object.defineProperty(globalThis.window, "RTCPeerConnection", {
             get: () => {
                 throw Error("Secure mode, naaah!");
             },
@@ -1838,5 +1840,32 @@ describe("Call", function () {
 
         const err = await prom;
         expect(err.code).toBe(CallErrorCode.IceFailed);
+    });
+
+    it("should throw an error when trying to call 'placeCallWithCallFeeds' when crypto is enabled", async () => {
+        jest.spyOn(client.client, "getCrypto").mockReturnValue({} as unknown as CryptoApi);
+        call = new MatrixCall({
+            client: client.client,
+            roomId: FAKE_ROOM_ID,
+            opponentDeviceId: "opponent_device_id",
+            invitee: "invitee",
+        });
+        call.on(CallEvent.Error, jest.fn());
+
+        await expect(
+            call.placeCallWithCallFeeds([
+                new CallFeed({
+                    client: client.client,
+                    stream: new MockMediaStream("local_stream1", [
+                        new MockMediaStreamTrack("track_id", "audio"),
+                    ]) as unknown as MediaStream,
+                    userId: client.getUserId(),
+                    deviceId: undefined,
+                    purpose: SDPStreamMetadataPurpose.Usermedia,
+                    audioMuted: false,
+                    videoMuted: false,
+                }),
+            ]),
+        ).rejects.toThrow(new GroupCallUnknownDeviceError("invitee"));
     });
 });

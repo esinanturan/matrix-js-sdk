@@ -1,5 +1,5 @@
 module.exports = {
-    plugins: ["matrix-org", "import", "jsdoc"],
+    plugins: ["matrix-org", "import", "jsdoc", "n"],
     extends: ["plugin:matrix-org/babel", "plugin:matrix-org/jest", "plugin:import/typescript"],
     parserOptions: {
         project: ["./tsconfig.json"],
@@ -63,6 +63,10 @@ module.exports = {
                 name: "setImmediate",
                 message: "Use setTimeout instead.",
             },
+            {
+                name: "global",
+                message: "Use globalThis instead.",
+            },
         ],
 
         "import/no-restricted-paths": [
@@ -82,12 +86,11 @@ module.exports = {
         // Disabled tests are a reality for now but as soon as all of the xits are
         // eliminated, we should enforce this.
         "jest/no-disabled-tests": "off",
-        // Also treat "oldBackendOnly" as a test function.
         // Used in some crypto tests.
         "jest/no-standalone-expect": [
             "error",
             {
-                additionalTestBlockFunctions: ["beforeAll", "beforeEach", "oldBackendOnly", "newBackendOnly"],
+                additionalTestBlockFunctions: ["beforeAll", "beforeEach"],
             },
         ],
     },
@@ -108,10 +111,13 @@ module.exports = {
                 "@typescript-eslint/ban-ts-comment": "off",
                 // We're okay with assertion errors when we ask for them
                 "@typescript-eslint/no-non-null-assertion": "off",
-
-                // The non-TypeScript rule produces false positives
-                "func-call-spacing": "off",
-                "@typescript-eslint/func-call-spacing": ["error"],
+                "@typescript-eslint/no-empty-object-type": [
+                    "error",
+                    {
+                        // We do this sometimes to brand interfaces
+                        allowInterfaces: "with-single-extends",
+                    },
+                ],
 
                 "quotes": "off",
                 // We use a `logger` intermediary module
@@ -128,6 +134,15 @@ module.exports = {
                 // These need a bit more work before we can enable
                 // "jsdoc/check-param-names": "error",
                 // "jsdoc/check-indentation": "error",
+                // Ensure .ts extension on imports outside of tests
+                "n/file-extension-in-import": [
+                    "error",
+                    "always",
+                    {
+                        tryExtensions: [".ts"],
+                    },
+                ],
+                "no-extra-boolean-cast": "error",
             },
         },
         {
@@ -136,6 +151,7 @@ module.exports = {
                 // We don't need super strict typing in test utilities
                 "@typescript-eslint/explicit-function-return-type": "off",
                 "@typescript-eslint/explicit-member-accessibility": "off",
+                "@typescript-eslint/no-empty-object-type": "off",
             },
         },
     ],

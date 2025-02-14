@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { logger } from "./logger";
-import { MatrixClient } from "./client";
-import { IRoomEvent, IStateEvent } from "./sync-accumulator";
-import { TypedEventEmitter } from "./models/typed-event-emitter";
-import { sleep, IDeferred, defer } from "./utils";
-import { HTTPError } from "./http-api";
+import { logger } from "./logger.ts";
+import { type MatrixClient } from "./client.ts";
+import { type IRoomEvent, type IStateEvent } from "./sync-accumulator.ts";
+import { TypedEventEmitter } from "./models/typed-event-emitter.ts";
+import { sleep, type IDeferred, defer } from "./utils.ts";
+import { type HTTPError } from "./http-api/index.ts";
 
 // /sync requests allow you to set a timeout= but the request may continue
 // beyond that and wedge forever, so we need to track how long we are willing
@@ -196,8 +196,8 @@ class SlidingList {
      * @param list - The new list parameters
      */
     public replaceList(list: MSC3575List): void {
-        list.filters = list.filters || {};
-        list.ranges = list.ranges || [];
+        list.filters = list.filters ?? {};
+        list.ranges = list.ranges ?? [];
         this.list = JSON.parse(JSON.stringify(list));
         this.isModified = true;
 
@@ -265,7 +265,7 @@ export enum ExtensionState {
 /**
  * An interface that must be satisfied to register extensions
  */
-export interface Extension<Req extends {}, Res extends {}> {
+export interface Extension<Req extends object, Res extends object> {
     /**
      * The extension name to go under 'extensions' in the request body.
      * @returns The JSON key.
@@ -894,9 +894,9 @@ export class SlidingSync extends TypedEventEmitter<SlidingSyncEvent, SlidingSync
                     l.setModified(false);
                 });
                 // set default empty values so we don't need to null check
-                resp.lists = resp.lists || {};
-                resp.rooms = resp.rooms || {};
-                resp.extensions = resp.extensions || {};
+                resp.lists = resp.lists ?? {};
+                resp.rooms = resp.rooms ?? {};
+                resp.extensions = resp.extensions ?? {};
                 Object.keys(resp.lists).forEach((key: string) => {
                     const list = this.lists.get(key);
                     if (!list || !resp) {
@@ -934,7 +934,7 @@ export class SlidingSync extends TypedEventEmitter<SlidingSyncEvent, SlidingSync
             const listKeysWithUpdates: Set<string> = new Set();
             if (!doNotUpdateList) {
                 for (const [key, list] of Object.entries(resp.lists)) {
-                    list.ops = list.ops || [];
+                    list.ops = list.ops ?? [];
                     if (list.ops.length > 0) {
                         listKeysWithUpdates.add(key);
                     }

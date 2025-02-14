@@ -18,21 +18,21 @@ limitations under the License.
  * This is an internal module. See {@link MemoryStore} for the public class.
  */
 
-import { EventType } from "../@types/event";
-import { Room } from "../models/room";
-import { User } from "../models/user";
-import { IEvent, MatrixEvent } from "../models/event";
-import { RoomState, RoomStateEvent } from "../models/room-state";
-import { RoomMember } from "../models/room-member";
-import { Filter } from "../filter";
-import { ISavedSync, IStore, UserCreator } from "./index";
-import { RoomSummary } from "../models/room-summary";
-import { ISyncResponse } from "../sync-accumulator";
-import { IStateEventWithRoomId } from "../@types/search";
-import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
-import { IStoredClientOpts } from "../client";
-import { MapWithDefault } from "../utils";
-import { KnownMembership } from "../@types/membership";
+import { type EventType } from "../@types/event.ts";
+import { type Room } from "../models/room.ts";
+import { type User } from "../models/user.ts";
+import { type IEvent, type MatrixEvent } from "../models/event.ts";
+import { type RoomState, RoomStateEvent } from "../models/room-state.ts";
+import { type RoomMember } from "../models/room-member.ts";
+import { type Filter } from "../filter.ts";
+import { type ISavedSync, type IStore, type UserCreator } from "./index.ts";
+import { type RoomSummary } from "../models/room-summary.ts";
+import { type ISyncResponse } from "../sync-accumulator.ts";
+import { type IStateEventWithRoomId } from "../@types/search.ts";
+import { type IndexedToDeviceBatch, type ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage.ts";
+import { type IStoredClientOpts } from "../client.ts";
+import { MapWithDefault } from "../utils.ts";
+import { KnownMembership } from "../@types/membership.ts";
 
 function isValidFilterId(filterId?: string | number | null): boolean {
     const isValidStr =
@@ -258,7 +258,7 @@ export class MemoryStore implements IStore {
             if (isValidFilterId(value)) {
                 return value;
             }
-        } catch (e) {}
+        } catch {}
         return null;
     }
 
@@ -276,7 +276,7 @@ export class MemoryStore implements IStore {
             } else {
                 this.localStorage.removeItem(key);
             }
-        } catch (e) {}
+        } catch {}
     }
 
     /**

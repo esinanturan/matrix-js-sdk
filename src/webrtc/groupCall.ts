@@ -1,41 +1,40 @@
-import { TypedEventEmitter } from "../models/typed-event-emitter";
-import { CallFeed, SPEAKING_THRESHOLD } from "./callFeed";
-import { MatrixClient, IMyDevice } from "../client";
+import { TypedEventEmitter } from "../models/typed-event-emitter.ts";
+import { CallFeed, SPEAKING_THRESHOLD } from "./callFeed.ts";
+import { type MatrixClient, type IMyDevice } from "../client.ts";
 import {
     CallErrorCode,
     CallEvent,
-    CallEventHandlerMap,
+    type CallEventHandlerMap,
     CallState,
     genCallID,
-    MatrixCall,
+    type MatrixCall,
     setTracksEnabled,
     createNewMatrixCall,
     CallError,
-} from "./call";
-import { RoomMember } from "../models/room-member";
-import { Room } from "../models/room";
-import { RoomStateEvent } from "../models/room-state";
-import { logger } from "../logger";
-import { ReEmitter } from "../ReEmitter";
-import { SDPStreamMetadataPurpose } from "./callEventTypes";
-import { MatrixEvent } from "../models/event";
-import { EventType } from "../@types/event";
-import { CallEventHandlerEvent } from "./callEventHandler";
-import { GroupCallEventHandlerEvent } from "./groupCallEventHandler";
-import { IScreensharingOpts } from "./mediaHandler";
-import { mapsEqual } from "../utils";
-import { GroupCallStats } from "./stats/groupCallStats";
+} from "./call.ts";
+import { type RoomMember } from "../models/room-member.ts";
+import { type Room } from "../models/room.ts";
+import { RoomStateEvent } from "../models/room-state.ts";
+import { logger } from "../logger.ts";
+import { ReEmitter } from "../ReEmitter.ts";
+import { SDPStreamMetadataPurpose } from "./callEventTypes.ts";
+import { type MatrixEvent } from "../models/event.ts";
+import { EventType } from "../@types/event.ts";
+import { CallEventHandlerEvent } from "./callEventHandler.ts";
+import { GroupCallEventHandlerEvent } from "./groupCallEventHandler.ts";
+import { type IScreensharingOpts } from "./mediaHandler.ts";
+import { mapsEqual } from "../utils.ts";
+import { GroupCallStats } from "./stats/groupCallStats.ts";
 import {
-    ByteSentStatsReport,
-    CallFeedReport,
-    ConnectionStatsReport,
+    type ByteSentStatsReport,
+    type CallFeedReport,
+    type ConnectionStatsReport,
     StatsReport,
-    SummaryStatsReport,
-} from "./stats/statsReport";
-import { SummaryStatsReportGatherer } from "./stats/summaryStatsReportGatherer";
-import { CallFeedStatsReporter } from "./stats/callFeedStatsReporter";
-import { KnownMembership } from "../@types/membership";
-import { CallMembershipData } from "../matrixrtc/CallMembership";
+    type SummaryStatsReport,
+} from "./stats/statsReport.ts";
+import { SummaryStatsReportGatherer } from "./stats/summaryStatsReportGatherer.ts";
+import { CallFeedStatsReporter } from "./stats/callFeedStatsReporter.ts";
+import { KnownMembership } from "../@types/membership.ts";
 
 export enum GroupCallIntent {
     Ring = "m.ring",
@@ -196,11 +195,6 @@ export interface IGroupCallRoomMemberCallState {
 
 export interface IGroupCallRoomMemberState {
     "m.calls": IGroupCallRoomMemberCallState[];
-}
-
-// XXX: this hasn't made it into the MSC yet
-export interface ExperimentalGroupCallRoomMemberState {
-    memberships: CallMembershipData[];
 }
 
 export enum GroupCallState {
@@ -782,7 +776,7 @@ export class GroupCall extends TypedEventEmitter<
                     return false;
                 }
             }
-        } catch (e) {
+        } catch {
             /* istanbul ignore next */
             logger.log(
                 `GroupCall ${this.groupCallId} setMicrophoneMuted() no device or permission to receive local stream, muted=${muted}`,
@@ -817,7 +811,7 @@ export class GroupCall extends TypedEventEmitter<
                 await this.updateLocalUsermediaStream(stream);
                 this.localCallFeed.setAudioVideoMuted(null, muted);
                 setTracksEnabled(this.localCallFeed.stream.getVideoTracks(), !muted);
-            } catch (_) {
+            } catch {
                 // No permission to video device
                 /* istanbul ignore next */
                 logger.log(
@@ -1445,7 +1439,7 @@ export class GroupCall extends TypedEventEmitter<
      * Recalculates and updates the participant map to match the room state.
      */
     private updateParticipants(): void {
-        const localMember = this.room.getMember(this.client.getUserId()!)!;
+        const localMember = this.room.getMember(this.client.getSafeUserId());
         if (!localMember) {
             // The client hasn't fetched enough of the room state to get our own member
             // event. This probably shouldn't happen, but sanity check & exit for now.

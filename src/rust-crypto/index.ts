@@ -17,17 +17,17 @@ limitations under the License.
 import * as RustSdkCryptoJs from "@matrix-org/matrix-sdk-crypto-wasm";
 import { StoreHandle } from "@matrix-org/matrix-sdk-crypto-wasm";
 
-import { RustCrypto } from "./rust-crypto";
-import { IHttpOpts, MatrixHttpApi } from "../http-api";
-import { ServerSideSecretStorage } from "../secret-storage";
-import { ICryptoCallbacks } from "../crypto";
-import { Logger } from "../logger";
-import { CryptoStore, MigrationState } from "../crypto/store/base";
+import { RustCrypto } from "./rust-crypto.ts";
+import { type IHttpOpts, type MatrixHttpApi } from "../http-api/index.ts";
+import { type ServerSideSecretStorage } from "../secret-storage.ts";
+import { type Logger } from "../logger.ts";
+import { type CryptoStore, MigrationState } from "../crypto/store/base.ts";
 import {
     migrateFromLegacyCrypto,
     migrateLegacyLocalTrustIfNeeded,
     migrateRoomSettingsFromLegacyCrypto,
-} from "./libolm_migration";
+} from "./libolm_migration.ts";
+import { type CryptoCallbacks } from "../crypto-api/index.ts";
 
 /**
  * Create a new `RustCrypto` implementation
@@ -55,7 +55,7 @@ export async function initRustCrypto(args: {
     secretStorage: ServerSideSecretStorage;
 
     /** Crypto callbacks provided by the application. */
-    cryptoCallbacks: ICryptoCallbacks;
+    cryptoCallbacks: CryptoCallbacks;
 
     /**
      * The prefix to use on the indexeddbs created by rust-crypto.
@@ -145,7 +145,7 @@ async function initOlmMachine(
     userId: string,
     deviceId: string,
     secretStorage: ServerSideSecretStorage,
-    cryptoCallbacks: ICryptoCallbacks,
+    cryptoCallbacks: CryptoCallbacks,
     storeHandle: StoreHandle,
     legacyCryptoStore?: CryptoStore,
 ): Promise<RustCrypto> {

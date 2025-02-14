@@ -1,15 +1,15 @@
 import { ConnectionError } from "../../src/http-api/errors";
-import { ClientEvent, MatrixClient, Store } from "../../src/client";
+import { ClientEvent, type MatrixClient, type Store } from "../../src/client";
 import { ToDeviceMessageQueue } from "../../src/ToDeviceMessageQueue";
 import { getMockClientWithEventEmitter } from "../test-utils/client";
 import { StubStore } from "../../src/store/stub";
-import { IndexedToDeviceBatch } from "../../src/models/ToDeviceMessage";
+import { type IndexedToDeviceBatch } from "../../src/models/ToDeviceMessage";
 import { SyncState } from "../../src/sync";
 import { defer } from "../../src/utils";
 
 describe("onResumedSync", () => {
     let batch: IndexedToDeviceBatch | null;
-    let shouldFailSendToDevice: Boolean;
+    let shouldFailSendToDevice: boolean;
     let onSendToDeviceFailure: () => void;
     let onSendToDeviceSuccess: () => void;
     let resumeSync: (newState: SyncState, oldState: SyncState) => void;

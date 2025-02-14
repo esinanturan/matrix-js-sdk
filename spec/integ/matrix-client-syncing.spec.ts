@@ -16,8 +16,7 @@ limitations under the License.
 
 import "fake-indexeddb/auto";
 
-import HttpBackend from "matrix-mock-request";
-
+import type HttpBackend from "matrix-mock-request";
 import {
     EventTimeline,
     MatrixEvent,
@@ -25,16 +24,15 @@ import {
     RoomStateEvent,
     RoomMemberEvent,
     UNSTABLE_MSC2716_MARKER,
-    MatrixClient,
+    type MatrixClient,
     ClientEvent,
-    IndexedDBCryptoStore,
-    ISyncResponse,
-    IRoomEvent,
-    IJoinedRoom,
-    IStateEvent,
-    IMinimalEvent,
+    type ISyncResponse,
+    type IRoomEvent,
+    type IJoinedRoom,
+    type IStateEvent,
+    type IMinimalEvent,
     NotificationCountType,
-    IEphemeral,
+    type IEphemeral,
     Room,
     IndexedDBStore,
     RelationType,
@@ -47,8 +45,15 @@ import * as utils from "../test-utils/test-utils";
 import { TestClient } from "../TestClient";
 import { emitPromise, mkEvent, mkMessage } from "../test-utils/test-utils";
 import { THREAD_RELATION_TYPE } from "../../src/models/thread";
-import { IActionsObject } from "../../src/pushprocessor";
+import { type IActionsObject } from "../../src/pushprocessor";
 import { KnownMembership } from "../../src/@types/membership";
+
+declare module "../../src/@types/event" {
+    interface AccountDataEvents {
+        a: {};
+        b: {};
+    }
+}
 
 describe("MatrixClient syncing", () => {
     const selfUserId = "@alice:localhost";
@@ -112,7 +117,7 @@ describe("MatrixClient syncing", () => {
         });
 
         it("should emit RoomEvent.MyMembership for invite->leave->invite cycles", async () => {
-            await client!.initCrypto();
+            await client!.initRustCrypto();
 
             const roomId = "!cycles:example.org";
 
@@ -227,7 +232,7 @@ describe("MatrixClient syncing", () => {
         });
 
         it("should emit RoomEvent.MyMembership for knock->leave->knock cycles", async () => {
-            await client!.initCrypto();
+            await client!.initRustCrypto();
 
             const roomId = "!cycles:example.org";
 
@@ -556,7 +561,7 @@ describe("MatrixClient syncing", () => {
         });
 
         it("should resolve incoming invites from /sync", () => {
-            syncData.rooms.join[roomOne].state.events.push(
+            syncData.rooms.join[roomOne].state!.events.push(
                 utils.mkMembership({
                     room: roomOne,
                     mship: KnownMembership.Invite,
@@ -577,7 +582,7 @@ describe("MatrixClient syncing", () => {
             return Promise.all([httpBackend!.flushAllExpected(), awaitSyncEvent()]).then(() => {
                 const member = client!.getRoom(roomOne)!.getMember(userC)!;
                 expect(member.name).toEqual("The Boss");
-                expect(member.getAvatarUrl("home.server.url", 1, 1, "", false, false)).toBeTruthy();
+                expect(member.getAvatarUrl("https://home.server.url", 1, 1, "", false, false)).toBeTruthy();
             });
         });
 
@@ -589,7 +594,7 @@ describe("MatrixClient syncing", () => {
                     name: "The Ghost",
                 }) as IMinimalEvent,
             ];
-            syncData.rooms.join[roomOne].state.events.push(
+            syncData.rooms.join[roomOne].state!.events.push(
                 utils.mkMembership({
                     room: roomOne,
                     mship: KnownMembership.Invite,
@@ -617,7 +622,7 @@ describe("MatrixClient syncing", () => {
                     name: "The Ghost",
                 }) as IMinimalEvent,
             ];
-            syncData.rooms.join[roomOne].state.events.push(
+            syncData.rooms.join[roomOne].state!.events.push(
                 utils.mkMembership({
                     room: roomOne,
                     mship: KnownMembership.Invite,
@@ -644,7 +649,7 @@ describe("MatrixClient syncing", () => {
         });
 
         it("should no-op if resolveInvitesToProfiles is not set", () => {
-            syncData.rooms.join[roomOne].state.events.push(
+            syncData.rooms.join[roomOne].state!.events.push(
                 utils.mkMembership({
                     room: roomOne,
                     mship: KnownMembership.Invite,
@@ -1371,6 +1376,114 @@ describe("MatrixClient syncing", () => {
                 room.currentState.setStateEvents([SOME_STATE_EVENT]);
                 // Make sure we can still listen to the room state events after the reset
                 expect(stateEventEmitCount).toEqual(2);
+            });
+        });
+
+        describe("msc4222", () => {
+            const roomOneSyncOne = {
+                "timeline": {
+                    events: [
+                        utils.mkMessage({
+                            room: roomOne,
+                            user: otherUserId,
+                            msg: "hello",
+                        }),
+                    ],
+                },
+                "org.matrix.msc4222.state_after": {
+                    events: [
+                        utils.mkEvent({
+                            type: "m.room.name",
+                            room: roomOne,
+                            user: otherUserId,
+                            content: {
+                                name: "Initial room name",
+                            },
+                        }),
+                        utils.mkMembership({
+                            room: roomOne,
+                            mship: KnownMembership.Join,
+                            user: otherUserId,
+                        }),
+                        utils.mkMembership({
+                            room: roomOne,
+                            mship: KnownMembership.Join,
+                            user: selfUserId,
+                        }),
+                        utils.mkEvent({
+                            type: "m.room.create",
+                            room: roomOne,
+                            user: selfUserId,
+                            content: {},
+                        }),
+                    ],
+                },
+            };
+            const roomOneSyncTwo = {
+                "org.matrix.msc4222.state_after": {
+                    events: [
+                        utils.mkEvent({
+                            type: "m.room.topic",
+                            room: roomOne,
+                            user: selfUserId,
+                            content: { topic: "A new room topic" },
+                        }),
+                    ],
+                },
+                "state": {
+                    events: [
+                        utils.mkEvent({
+                            type: "m.room.name",
+                            room: roomOne,
+                            user: selfUserId,
+                            content: { name: "A new room name" },
+                        }),
+                    ],
+                },
+            };
+
+            it("should ignore state events in timeline when state_after is present", async () => {
+                httpBackend!.when("GET", "/sync").respond(200, {
+                    rooms: {
+                        join: { [roomOne]: roomOneSyncOne },
+                    },
+                });
+                httpBackend!.when("GET", "/sync").respond(200, {
+                    rooms: {
+                        join: { [roomOne]: roomOneSyncTwo },
+                    },
+                });
+
+                client!.startClient();
+                return Promise.all([httpBackend!.flushAllExpected(), awaitSyncEvent(2)]).then(() => {
+                    const room = client!.getRoom(roomOne)!;
+                    expect(room.name).toEqual("Initial room name");
+                    expect(room.currentState.getStateEvents("m.room.topic", "")?.getContent().topic).toBe(
+                        "A new room topic",
+                    );
+                });
+            });
+
+            it("should respect state events in state_after for left rooms", async () => {
+                httpBackend!.when("GET", "/sync").respond(200, {
+                    rooms: {
+                        join: { [roomOne]: roomOneSyncOne },
+                    },
+                });
+                httpBackend!.when("GET", "/sync").respond(200, {
+                    rooms: {
+                        leave: { [roomOne]: roomOneSyncTwo },
+                    },
+                });
+
+                client!.startClient();
+                return Promise.all([httpBackend!.flushAllExpected(), awaitSyncEvent(2)]).then(() => {
+                    const room = client!.getRoom(roomOne)!;
+                    expect(room.name).toEqual("Initial room name");
+                    expect(room.currentState.getStateEvents("m.room.topic", "")?.getContent().topic).toBe(
+                        "A new room topic",
+                    );
+                });
             });
         });
     });
@@ -2274,6 +2387,57 @@ describe("MatrixClient syncing", () => {
                 }),
             ]);
         });
+
+        describe("msc4222", () => {
+            it("should respect state events in state_after for left rooms", async () => {
+                httpBackend!.when("POST", "/filter").respond(200, {
+                    filter_id: "another_id",
+                });
+
+                httpBackend!.when("GET", "/sync").respond(200, {
+                    rooms: {
+                        leave: {
+                            [roomOne]: {
+                                "org.matrix.msc4222.state_after": {
+                                    events: [
+                                        utils.mkEvent({
+                                            type: "m.room.topic",
+                                            room: roomOne,
+                                            user: selfUserId,
+                                            content: { topic: "A new room topic" },
+                                        }),
+                                    ],
+                                },
+                                "state": {
+                                    events: [
+                                        utils.mkEvent({
+                                            type: "m.room.name",
+                                            room: roomOne,
+                                            user: selfUserId,
+                                            content: { name: "A new room name" },
+                                        }),
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                });
+
+                const [[room]] = await Promise.all([
+                    client!.syncLeftRooms(),
+
+                    // first flush the filter request; this will make syncLeftRooms make its /sync call
+                    httpBackend!.flush("/filter").then(() => {
+                        return httpBackend!.flushAllExpected();
+                    }),
+                ]);
+
+                expect(room.name).toEqual("Empty room");
+                expect(room.currentState.getStateEvents("m.room.topic", "")?.getContent().topic).toBe(
+                    "A new room topic",
+                );
+            });
+        });
     });
 
     describe("peek", () => {
@@ -2405,16 +2569,15 @@ describe("MatrixClient syncing (IndexedDB version)", () => {
     };
 
     it("should emit ClientEvent.Room when invited while using indexeddb crypto store", async () => {
-        const idbTestClient = new TestClient(selfUserId, "DEVICE", selfAccessToken, undefined, {
-            cryptoStore: new IndexedDBCryptoStore(global.indexedDB, "tests"),
-        });
+        // rust crypto uses by default indexeddb
+        const idbTestClient = new TestClient(selfUserId, "DEVICE", selfAccessToken);
         const idbHttpBackend = idbTestClient.httpBackend;
         const idbClient = idbTestClient.client;
         idbHttpBackend.when("GET", "/versions").respond(200, {});
         idbHttpBackend.when("GET", "/pushrules/").respond(200, {});
         idbHttpBackend.when("POST", "/filter").respond(200, { filter_id: "a filter id" });
 
-        await idbClient.initCrypto();
+        await idbClient.initRustCrypto();
 
         const roomId = "!invite:example.org";
 
@@ -2486,7 +2649,7 @@ describe("MatrixClient syncing (IndexedDB version)", () => {
 
         let idbTestClient = new TestClient(selfUserId, "DEVICE", selfAccessToken, undefined, {
             store: new IndexedDBStore({
-                indexedDB: global.indexedDB,
+                indexedDB: globalThis.indexedDB,
                 dbName: "test",
             }),
         });
@@ -2558,7 +2721,7 @@ describe("MatrixClient syncing (IndexedDB version)", () => {
 
         idbTestClient = new TestClient(selfUserId, "DEVICE", selfAccessToken, undefined, {
             store: new IndexedDBStore({
-                indexedDB: global.indexedDB,
+                indexedDB: globalThis.indexedDB,
                 dbName: "test",
             }),
         });

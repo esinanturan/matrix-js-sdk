@@ -14,15 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import type { ISignatures } from "./signed";
-
-export type OlmGroupSessionExtraData = {
-    untrusted?: boolean;
-    sharedHistory?: boolean;
-};
+import type { ISignatures } from "./signed.ts";
 
 // Backwards compatible re-export
-export type { EventDecryptionResult as IEventDecryptionResult } from "../common-crypto/CryptoBackend";
+export type { EventDecryptionResult as IEventDecryptionResult } from "../common-crypto/CryptoBackend.ts";
 
 interface Extensible {
     [key: string]: any;
@@ -30,7 +25,7 @@ interface Extensible {
 
 /* eslint-disable camelcase */
 
-/** The result of a call to {@link MatrixClient.exportRoomKeys} */
+/** The result of a call to {@link crypto-api!CryptoApi.exportRoomKeys} */
 export interface IMegolmSessionData extends Extensible {
     /** Sender's Curve25519 device key */
     sender_key: string;

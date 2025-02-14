@@ -14,15 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { MockedObject } from "jest-mock";
+import { type MockedObject } from "jest-mock";
 
-import { MatrixClient } from "../../src/client";
+import { type MatrixClient } from "../../src/client";
 import { EventTimelineSet } from "../../src/models/event-timeline-set";
 import { Room } from "../../src/models/room";
 import { EventTimeline } from "../../src/models/event-timeline";
 import { TimelineIndex, TimelineWindow } from "../../src/timeline-window";
 import { mkMessage } from "../test-utils/test-utils";
-import { MatrixEvent } from "../../src/models/event";
+import { type MatrixEvent } from "../../src/models/event";
 
 const ROOM_ID = "roomId";
 const USER_ID = "userId";
@@ -62,7 +62,7 @@ function addEventsToTimeline(timeline: EventTimeline, numEvents: number, toStart
                 user: USER_ID,
                 event: true,
             }),
-            { toStartOfTimeline },
+            { toStartOfTimeline, addToState: false },
         );
     }
 }
@@ -451,8 +451,8 @@ describe("TimelineWindow", function () {
             const liveEvents = createEvents(5);
             const [, , e3, e4, e5] = oldEvents;
             const [, e7, e8, e9, e10] = liveEvents;
-            room.addLiveEvents(liveEvents);
-            room.addEventsToTimeline(oldEvents, true, oldTimeline);
+            room.addLiveEvents(liveEvents, { addToState: false });
+            room.addEventsToTimeline(oldEvents, true, false, oldTimeline);
 
             // And 2 windows over the timelines in this room
             const oldWindow = new TimelineWindow(mockClient, timelineSet);

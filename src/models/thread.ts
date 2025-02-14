@@ -14,21 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { Optional } from "matrix-events-sdk";
+import { type Optional } from "matrix-events-sdk";
 
-import { MatrixClient, PendingEventOrdering } from "../client";
-import { TypedReEmitter } from "../ReEmitter";
-import { RelationType } from "../@types/event";
-import { IThreadBundledRelationship, MatrixEvent, MatrixEventEvent } from "./event";
-import { Direction, EventTimeline } from "./event-timeline";
-import { EventTimelineSet, EventTimelineSetHandlerMap } from "./event-timeline-set";
-import { NotificationCountType, Room, RoomEvent } from "./room";
-import { RoomState } from "./room-state";
-import { ServerControlledNamespacedValue } from "../NamespacedValue";
-import { logger } from "../logger";
-import { ReadReceipt } from "./read-receipt";
-import { CachedReceiptStructure, Receipt, ReceiptType } from "../@types/read_receipts";
-import { Feature, ServerSupport } from "../feature";
+import { type MatrixClient, PendingEventOrdering } from "../client.ts";
+import { TypedReEmitter } from "../ReEmitter.ts";
+import { RelationType } from "../@types/event.ts";
+import { type IThreadBundledRelationship, MatrixEvent, MatrixEventEvent } from "./event.ts";
+import { Direction, EventTimeline } from "./event-timeline.ts";
+import { EventTimelineSet, type EventTimelineSetHandlerMap } from "./event-timeline-set.ts";
+import { type NotificationCountType, type Room, RoomEvent } from "./room.ts";
+import { type RoomState } from "./room-state.ts";
+import { ServerControlledNamespacedValue } from "../NamespacedValue.ts";
+import { logger } from "../logger.ts";
+import { ReadReceipt } from "./read-receipt.ts";
+import { type CachedReceiptStructure, type Receipt, ReceiptType } from "../@types/read_receipts.ts";
+import { Feature, ServerSupport } from "../feature.ts";
 
 export enum ThreadEvent {
     New = "Thread.new",
@@ -208,6 +208,7 @@ export class Thread extends ReadReceipt<ThreadEmittedEvents, ThreadEventHandlerM
 
     public static setServerSideSupport(status: FeatureSupport): void {
         Thread.hasServerSideSupport = status;
+        // XXX: This global latching behaviour is really unexpected and means that you can't undo when moving to a server without support
         if (status !== FeatureSupport.Stable) {
             FILTER_RELATED_BY_SENDERS.setPreferUnstable(true);
             FILTER_RELATED_BY_REL_TYPES.setPreferUnstable(true);
@@ -317,6 +318,7 @@ export class Thread extends ReadReceipt<ThreadEmittedEvents, ThreadEventHandlerM
                 toStartOfTimeline,
                 fromCache: false,
                 roomState: this.roomState,
+                addToState: false,
             });
         }
     }
@@ -343,7 +345,7 @@ export class Thread extends ReadReceipt<ThreadEmittedEvents, ThreadEventHandlerM
         if (this.findEventById(eventId)) {
             return;
         }
-        this.timelineSet.insertEventIntoTimeline(event, this.liveTimeline, this.roomState);
+        this.timelineSet.insertEventIntoTimeline(event, this.liveTimeline, this.roomState, false);
     }
 
     public addEvents(events: MatrixEvent[], toStartOfTimeline: boolean): void {
@@ -618,7 +620,7 @@ export class Thread extends ReadReceipt<ThreadEmittedEvents, ThreadEventHandlerM
                     // if the thread has regular events, this will just load the last reply.
                     // if the thread is newly created, this will load the root event.
                     if (this.replyCount === 0 && this.rootEvent) {
-                        this.timelineSet.addEventsToTimeline([this.rootEvent], true, this.liveTimeline, null);
+                        this.timelineSet.addEventsToTimeline([this.rootEvent], true, false, this.liveTimeline, null);
                         this.liveTimeline.setPaginationToken(null, Direction.Backward);
                     } else {
                         this.initalEventFetchProm = this.client.paginateEventTimeline(this.liveTimeline, {

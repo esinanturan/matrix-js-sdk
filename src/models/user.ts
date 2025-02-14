@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { MatrixClient } from "../matrix";
-import { MatrixEvent } from "./event";
-import { TypedEventEmitter } from "./typed-event-emitter";
+import { type MatrixClient } from "../matrix.ts";
+import { type MatrixEvent } from "./event.ts";
+import { TypedEventEmitter } from "./typed-event-emitter.ts";
 
 export enum UserEvent {
     DisplayName = "User.displayName",

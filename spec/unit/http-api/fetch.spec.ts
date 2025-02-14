@@ -14,22 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { Mocked } from "jest-mock";
+import { type Mocked } from "jest-mock";
 
 import { FetchHttpApi } from "../../../src/http-api/fetch";
 import { TypedEventEmitter } from "../../../src/models/typed-event-emitter";
 import {
     ClientPrefix,
     HttpApiEvent,
-    HttpApiEventHandlerMap,
+    type HttpApiEventHandlerMap,
     IdentityPrefix,
-    IHttpOpts,
+    type IHttpOpts,
     MatrixError,
     Method,
 } from "../../../src";
 import { emitPromise } from "../../test-utils/test-utils";
-import { defer, QueryDict } from "../../../src/utils";
-import { Logger } from "../../../src/logger";
+import { defer, type QueryDict } from "../../../src/utils";
+import { type Logger } from "../../../src/logger";
 
 describe("FetchHttpApi", () => {
     const baseUrl = "http://baseUrl";
@@ -60,11 +60,11 @@ describe("FetchHttpApi", () => {
     });
 
     it("should fall back to global fetch if fetchFn not provided", () => {
-        global.fetch = jest.fn();
-        expect(global.fetch).not.toHaveBeenCalled();
+        globalThis.fetch = jest.fn();
+        expect(globalThis.fetch).not.toHaveBeenCalled();
         const api = new FetchHttpApi(new TypedEventEmitter<any, any>(), { baseUrl, prefix });
         api.fetch("test");
-        expect(global.fetch).toHaveBeenCalled();
+        expect(globalThis.fetch).toHaveBeenCalled();
     });
 
     it("should update identity server base url", () => {

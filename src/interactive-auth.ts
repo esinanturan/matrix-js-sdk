@@ -16,12 +16,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { logger } from "./logger";
-import { MatrixClient } from "./client";
-import { defer, IDeferred } from "./utils";
-import { MatrixError } from "./http-api";
-import { UIAResponse } from "./@types/uia";
-import { UserIdentifier } from "./@types/auth";
+import { logger } from "./logger.ts";
+import { type MatrixClient } from "./client.ts";
+import { defer, type IDeferred } from "./utils.ts";
+import { MatrixError } from "./http-api/index.ts";
+import { type UIAResponse } from "./@types/uia.ts";
+import { type UserIdentifier } from "./@types/auth.ts";
 
 const EMAIL_STAGE_TYPE = "m.login.email.identity";
 const MSISDN_STAGE_TYPE = "m.login.msisdn";
@@ -134,6 +134,7 @@ export type AuthDict =
     | RecaptchaDict
     | EmailIdentityDict
     | { type: Exclude<string, AuthType>; [key: string]: any }
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     | {};
 
 export class NoAuthFlowFoundError extends Error {
@@ -415,16 +416,18 @@ export class InteractiveAuth<T> {
         while (this.submitPromise) {
             try {
                 await this.submitPromise;
-            } catch (e) {}
+            } catch {}
         }
 
         // use the sessionid from the last request, if one is present.
         let auth: AuthDict;
         if ((this.data as IAuthData)?.session) {
-            auth = {
-                session: (this.data as IAuthData).session,
-            };
-            Object.assign(auth, authData);
+            auth = Object.assign(
+                {
+                    session: (this.data as IAuthData).session,
+                },
+                authData,
+            );
         } else {
             auth = authData;
         }

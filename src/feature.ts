@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { IServerVersions } from "./client";
+import { type IServerVersions } from "./client.ts";
 
 export enum ServerSupport {
     Stable,
@@ -33,7 +33,6 @@ export enum Feature {
     AccountDataDeletion = "AccountDataDeletion",
     RelationsRecursion = "RelationsRecursion",
     IntentionalMentions = "IntentionalMentions",
-    MigrateServerNameToVia = "MigrateServerNameToVia",
 }
 
 type FeatureSupportCondition = {
@@ -61,13 +60,11 @@ const featureSupportResolver: Record<string, FeatureSupportCondition> = {
     },
     [Feature.RelationsRecursion]: {
         unstablePrefixes: ["org.matrix.msc3981"],
+        matrixVersion: "v1.10",
     },
     [Feature.IntentionalMentions]: {
         unstablePrefixes: ["org.matrix.msc3952_intentional_mentions"],
         matrixVersion: "v1.7",
-    },
-    [Feature.MigrateServerNameToVia]: {
-        unstablePrefixes: ["org.matrix.msc4156"],
     },
 };
 

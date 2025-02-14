@@ -1,9 +1,15 @@
+import clc from "cli-color";
+import fs from "fs";
+import readline from "readline";
+import sdk, { ClientEvent, EventType, MsgType, RoomEvent } from "matrix-js-sdk";
+import { KnownMembership } from "matrix-js-sdk/lib/@types/membership.js";
+
+var myHomeServer = "http://localhost:8008";
 var myUserId = "@example:localhost";
 var myAccessToken = "QGV4YW1wbGU6bG9jYWxob3N0.qPEvLuYfNBjxikiCjP";
-var sdk = require("matrix-js-sdk");
-var clc = require("cli-color");
+
 var matrixClient = sdk.createClient({
-    baseUrl: "http://localhost:8008",
+    baseUrl: myHomeServer,
     accessToken: myAccessToken,
     userId: myUserId,
 });
@@ -15,7 +21,6 @@ var numMessagesToShow = 20;
 
 // Reading from stdin
 var CLEAR_CONSOLE = "\x1B[2J";
-var readline = require("readline");
 var rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -89,20 +94,14 @@ rl.on("line", function (line) {
             );
         } else if (line.indexOf("/file ") === 0) {
             var filename = line.split(" ")[1].trim();
-            var stream = fs.createReadStream(filename);
-            matrixClient
-                .uploadContent({
-                    stream: stream,
-                    name: filename,
-                })
-                .then(function (url) {
-                    var content = {
-                        msgtype: "m.file",
-                        body: filename,
-                        url: JSON.parse(url).content_uri,
-                    };
-                    matrixClient.sendMessage(viewingRoom.roomId, content);
+            let buffer = fs.readFileSync("./your_file_name");
+            matrixClient.uploadContent(new Blob([buffer])).then(function (response) {
+                matrixClient.sendMessage(viewingRoom.roomId, {
+                    msgtype: MsgType.File,
+                    body: filename,
+                    url: response.content_uri,
                 });
+            });
         } else {
             matrixClient.sendTextMessage(viewingRoom.roomId, line).finally(function () {
                 printMessages();
@@ -138,7 +137,7 @@ rl.on("line", function (line) {
 // ==== END User input
 
 // show the room list after syncing.
-matrixClient.on("sync", function (state, prevState, data) {
+matrixClient.on(ClientEvent.Sync, function (state, prevState, data) {
     switch (state) {
         case "PREPARED":
             setRoomList();
@@ -149,7 +148,7 @@ matrixClient.on("sync", function (state, prevState, data) {
     }
 });
 
-matrixClient.on("Room", function () {
+matrixClient.on(ClientEvent.Room, function () {
     setRoomList();
     if (!viewingRoom) {
         printRoomList();
@@ -158,11 +157,11 @@ matrixClient.on("Room", function () {
 });
 
 // print incoming messages.
-matrixClient.on("Room.timeline", function (event, room, toStartOfTimeline) {
+matrixClient.on(RoomEvent.Timeline, function (event, room, toStartOfTimeline) {
     if (toStartOfTimeline) {
         return; // don't print paginated results
     }
-    if (!viewingRoom || viewingRoom.roomId !== room.roomId) {
+    if (!viewingRoom || viewingRoom.roomId !== room?.roomId) {
         return; // not viewing a room or viewing the wrong room.
     }
     printLine(event);
@@ -305,7 +304,7 @@ function printRoomInfo(room) {
     print(eTypeHeader + sendHeader + contentHeader);
     print(new Array(100).join("-"));
     eventMap.keys().forEach(function (eventType) {
-        if (eventType === "m.room.member") {
+        if (eventType === EventType.RoomMember) {
             return;
         } // use /members instead.
         var eventEventMap = eventMap.get(eventType);
@@ -343,7 +342,7 @@ function printLine(event) {
         name = name.slice(0, maxNameWidth - 1) + "\u2026";
     }
 
-    if (event.getType() === "m.room.message") {
+    if (event.getType() === EventType.RoomMessage) {
         body = event.getContent().body;
     } else if (event.isState()) {
         var stateName = event.getType();
@@ -381,7 +380,7 @@ function print(str, formatter) {
         }
         console.log.apply(console.log, newArgs);
     } else {
-        console.log.apply(console.log, arguments);
+        console.log.apply(console.log, [...arguments]);
     }
 }
 
@@ -394,4 +393,4 @@ function fixWidth(str, len) {
     return str;
 }
 
-matrixClient.startClient(numMessagesToShow); // messages for each room.
+matrixClient.startClient({ initialSyncLimit: numMessagesToShow });

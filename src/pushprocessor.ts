@@ -14,32 +14,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { deepCompare, escapeRegExp, globToRegexp, isNullOrUndefined } from "./utils";
-import { logger } from "./logger";
-import { MatrixClient } from "./client";
-import { MatrixEvent } from "./models/event";
+import { deepCompare, escapeRegExp, globToRegexp, isNullOrUndefined } from "./utils.ts";
+import { logger } from "./logger.ts";
+import { type MatrixClient } from "./client.ts";
+import { type MatrixEvent } from "./models/event.ts";
 import {
     ConditionKind,
-    IAnnotatedPushRule,
-    ICallStartedCondition,
-    ICallStartedPrefixCondition,
-    IContainsDisplayNameCondition,
-    IEventMatchCondition,
-    IEventPropertyContainsCondition,
-    IEventPropertyIsCondition,
-    IPushRule,
-    IPushRules,
-    IRoomMemberCountCondition,
-    ISenderNotificationPermissionCondition,
-    PushRuleAction,
+    type IAnnotatedPushRule,
+    type ICallStartedCondition,
+    type ICallStartedPrefixCondition,
+    type IContainsDisplayNameCondition,
+    type IEventMatchCondition,
+    type IEventPropertyContainsCondition,
+    type IEventPropertyIsCondition,
+    type IPushRule,
+    type IPushRules,
+    type IRoomMemberCountCondition,
+    type ISenderNotificationPermissionCondition,
+    type PushRuleAction,
     PushRuleActionName,
-    PushRuleCondition,
+    type PushRuleCondition,
     PushRuleKind,
-    PushRuleSet,
+    type PushRuleSet,
     RuleId,
     TweakName,
-} from "./@types/PushRules";
-import { EventType } from "./@types/event";
+} from "./@types/PushRules.ts";
+import { EventType } from "./@types/event.ts";
 
 const RULEKINDS_IN_ORDER = [
     PushRuleKind.Override,

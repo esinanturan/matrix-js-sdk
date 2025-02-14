@@ -14,17 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { MockedObject } from "jest-mock";
+import { type MockedObject } from "jest-mock";
 
 import * as utils from "../test-utils/test-utils";
 import { makeBeaconEvent, makeBeaconInfoEvent } from "../test-utils/beacon";
 import { filterEmitCallsByEventType } from "../test-utils/emitter";
 import { RoomState, RoomStateEvent } from "../../src/models/room-state";
-import { Beacon, BeaconEvent, getBeaconInfoIdentifier } from "../../src/models/beacon";
+import { type Beacon, BeaconEvent, getBeaconInfoIdentifier } from "../../src/models/beacon";
 import { EventType, RelationType, UNSTABLE_MSC2716_MARKER } from "../../src/@types/event";
 import { MatrixEvent, MatrixEventEvent } from "../../src/models/event";
 import { M_BEACON } from "../../src/@types/beacon";
-import { MatrixClient } from "../../src/client";
+import { type MatrixClient } from "../../src/client";
 import { defer } from "../../src/utils";
 import { Room } from "../../src/models/room";
 import { KnownMembership } from "../../src/@types/membership";
@@ -1120,61 +1120,6 @@ describe("RoomState", function () {
                     credentials: { userId: userA },
                 } as unknown as MatrixClient),
             ).toBeFalsy();
-        });
-    });
-    describe("skipWrongOrderRoomStateInserts", () => {
-        const idNow = "now";
-        const idBefore = "before";
-        const endState = new RoomState(roomId);
-        const startState = new RoomState(roomId, undefined, true);
-
-        let onRoomStateEvent: (event: MatrixEvent, state: RoomState, lastStateEvent: MatrixEvent | null) => void;
-        const evNow = new MatrixEvent({
-            type: "m.call.member",
-            room_id: roomId,
-            state_key: "@user:example.org",
-            content: {},
-        });
-        evNow.event.unsigned = { replaces_state: idBefore };
-        evNow.event.event_id = idNow;
-
-        const evBefore = new MatrixEvent({
-            type: "m.call.member",
-            room_id: roomId,
-            state_key: "@user:example.org",
-            content: {},
-        });
-
-        const updatedStateWithBefore = jest.fn();
-        const updatedStateWithNow = jest.fn();
-
-        beforeEach(() => {
-            evBefore.event.event_id = idBefore;
-            onRoomStateEvent = (event, _state, _lastState) => {
-                if (event.event.event_id === idNow) {
-                    updatedStateWithNow();
-                } else if (event.event.event_id === idBefore) {
-                    updatedStateWithBefore();
-                }
-            };
-            endState.on(RoomStateEvent.Events, onRoomStateEvent);
-            startState.on(RoomStateEvent.Events, onRoomStateEvent);
-        });
-        afterEach(() => {
-            endState.off(RoomStateEvent.Events, onRoomStateEvent);
-            startState.off(RoomStateEvent.Events, onRoomStateEvent);
-            updatedStateWithNow.mockReset();
-            updatedStateWithBefore.mockReset();
-        });
-        it("should skip inserting state to the end of the timeline if the current endState events replaces_state id is the same as the inserted events id", () => {
-            endState.setStateEvents([evNow, evBefore]);
-            expect(updatedStateWithBefore).not.toHaveBeenCalled();
-            expect(updatedStateWithNow).toHaveBeenCalled();
-        });
-        it("should skip inserting state at the beginning of the timeline if the inserted events replaces_state is the event id of the current startState", () => {
-            startState.setStateEvents([evBefore, evNow]);
-            expect(updatedStateWithBefore).toHaveBeenCalled();
-            expect(updatedStateWithNow).not.toHaveBeenCalled();
         });
     });
 });

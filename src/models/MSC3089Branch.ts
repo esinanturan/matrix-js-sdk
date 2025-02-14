@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { MatrixClient } from "../client";
-import { RelationType, UNSTABLE_MSC3089_BRANCH } from "../@types/event";
-import { IContent, MatrixEvent } from "./event";
-import { MSC3089TreeSpace } from "./MSC3089TreeSpace";
-import { EventTimeline } from "./event-timeline";
-import { FileType } from "../http-api";
-import type { ISendEventResponse } from "../@types/requests";
-import { EncryptedFile } from "../@types/media";
+import { type MatrixClient } from "../client.ts";
+import { RelationType, UNSTABLE_MSC3089_BRANCH } from "../@types/event.ts";
+import { type IContent, type MatrixEvent } from "./event.ts";
+import { type MSC3089TreeSpace } from "./MSC3089TreeSpace.ts";
+import { EventTimeline } from "./event-timeline.ts";
+import { type FileType } from "../http-api/index.ts";
+import type { ISendEventResponse } from "../@types/requests.ts";
+import { type EncryptedFile } from "../@types/media.ts";
 
 export interface MSC3089EventContent {
     active?: boolean;

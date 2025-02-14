@@ -24,35 +24,34 @@ limitations under the License.
 import { v4 as uuidv4 } from "uuid";
 import { parse as parseSdp, write as writeSdp } from "sdp-transform";
 
-import { logger } from "../logger";
-import { checkObjectHasKeys, isNullOrUndefined, recursivelyAssign } from "../utils";
-import { MatrixEvent } from "../models/event";
-import { EventType, TimelineEvents, ToDeviceMessageId } from "../@types/event";
-import { RoomMember } from "../models/room-member";
-import { randomString } from "../randomstring";
+import { logger } from "../logger.ts";
+import { checkObjectHasKeys, isNullOrUndefined, recursivelyAssign } from "../utils.ts";
+import { type MatrixEvent } from "../models/event.ts";
+import { EventType, type TimelineEvents, ToDeviceMessageId } from "../@types/event.ts";
+import { type RoomMember } from "../models/room-member.ts";
+import { secureRandomString } from "../randomstring.ts";
 import {
-    MCallReplacesEvent,
-    MCallAnswer,
-    MCallInviteNegotiate,
-    CallCapabilities,
+    type MCallReplacesEvent,
+    type MCallAnswer,
+    type MCallInviteNegotiate,
+    type CallCapabilities,
     SDPStreamMetadataPurpose,
-    SDPStreamMetadata,
+    type SDPStreamMetadata,
     SDPStreamMetadataKey,
-    MCallSDPStreamMetadataChanged,
-    MCallSelectAnswer,
-    MCAllAssertedIdentity,
-    MCallCandidates,
-    MCallBase,
-    MCallHangupReject,
-} from "./callEventTypes";
-import { CallFeed } from "./callFeed";
-import { MatrixClient } from "../client";
-import { EventEmitterEvents, TypedEventEmitter } from "../models/typed-event-emitter";
-import { DeviceInfo } from "../crypto/deviceinfo";
-import { GroupCallUnknownDeviceError } from "./groupCall";
-import { IScreensharingOpts } from "./mediaHandler";
-import { MatrixError } from "../http-api";
-import { GroupCallStats } from "./stats/groupCallStats";
+    type MCallSDPStreamMetadataChanged,
+    type MCallSelectAnswer,
+    type MCAllAssertedIdentity,
+    type MCallCandidates,
+    type MCallBase,
+    type MCallHangupReject,
+} from "./callEventTypes.ts";
+import { CallFeed } from "./callFeed.ts";
+import { type MatrixClient } from "../client.ts";
+import { EventEmitterEvents, TypedEventEmitter } from "../models/typed-event-emitter.ts";
+import { GroupCallUnknownDeviceError } from "./groupCall.ts";
+import { type IScreensharingOpts } from "./mediaHandler.ts";
+import { MatrixError } from "../http-api/index.ts";
+import { type GroupCallStats } from "./stats/groupCallStats.ts";
 
 interface CallOpts {
     // The room ID for this call.
@@ -277,7 +276,7 @@ export class CallError extends Error {
 }
 
 export function genCallID(): string {
-    return Date.now().toString() + randomString(16);
+    return Date.now().toString() + secureRandomString(16);
 }
 
 function getCodecParamMods(isPtt: boolean): CodecParamsMod[] {
@@ -426,7 +425,7 @@ export class MatrixCall extends TypedEventEmitter<CallEvent, CallEventHandlerMap
     private callStartTime?: number;
 
     private opponentDeviceId?: string;
-    private opponentDeviceInfo?: DeviceInfo;
+    private hasOpponentDeviceInfo?: boolean;
     private opponentSessionId?: string;
     public groupCallId?: string;
 
@@ -631,23 +630,18 @@ export class MatrixCall extends TypedEventEmitter<CallEvent, CallEventHandlerMap
         if (!this.client.getUseE2eForGroupCall()) return;
         // It's possible to want E2EE and yet not have the means to manage E2EE
         // ourselves (for example if the client is a RoomWidgetClient)
-        if (!this.client.isCryptoEnabled()) {
+        if (!this.client.getCrypto()) {
             // All we know is the device ID
-            this.opponentDeviceInfo = new DeviceInfo(this.opponentDeviceId);
+            this.hasOpponentDeviceInfo = true;
             return;
         }
-        // if we've got to this point, we do want to init crypto, so throw if we can't
-        if (!this.client.crypto) throw new Error("Crypto is not initialised.");
-
         const userId = this.invitee || this.getOpponentMember()?.userId;
 
         if (!userId) throw new Error("Couldn't find opponent user ID to init crypto");
 
-        const deviceInfoMap = await this.client.crypto.deviceList.downloadKeys([userId], false);
-        this.opponentDeviceInfo = deviceInfoMap.get(userId)?.get(this.opponentDeviceId);
-        if (this.opponentDeviceInfo === undefined) {
-            throw new GroupCallUnknownDeviceError(userId);
-        }
+        // Here we were calling `MatrixClient.crypto.deviceList.downloadKeys` which is not supported by the rust cryptography.
+        this.hasOpponentDeviceInfo = false;
+        throw new GroupCallUnknownDeviceError(userId);
     }
 
     /**
@@ -2024,7 +2018,7 @@ export class MatrixCall extends TypedEventEmitter<CallEvent, CallEventHandlerMap
 
                 this.sendVoipEvent(EventType.CallNegotiate, {
                     lifetime: CALL_TIMEOUT_MS,
-                    description: this.peerConn!.localDescription?.toJSON(),
+                    description: this.peerConn!.localDescription?.toJSON() as RTCSessionDescription,
                     [SDPStreamMetadataKey]: this.getLocalSDPStreamMetadata(true),
                 });
             }
@@ -2152,9 +2146,9 @@ export class MatrixCall extends TypedEventEmitter<CallEvent, CallEventHandlerMap
 
         // clunky because TypeScript can't follow the types through if we use an expression as the key
         if (this.state === CallState.CreateOffer) {
-            content.offer = this.peerConn!.localDescription?.toJSON();
+            content.offer = this.peerConn!.localDescription?.toJSON() as RTCSessionDescription;
         } else {
-            content.description = this.peerConn!.localDescription?.toJSON();
+            content.description = this.peerConn!.localDescription?.toJSON() as RTCSessionDescription;
         }
 
         content.capabilities = {
@@ -2511,23 +2505,14 @@ export class MatrixCall extends TypedEventEmitter<CallEvent, CallEventHandlerMap
 
             const userId = this.invitee || this.getOpponentMember()!.userId;
             if (this.client.getUseE2eForGroupCall()) {
-                if (!this.opponentDeviceInfo) {
+                if (!this.hasOpponentDeviceInfo) {
                     logger.warn(`Call ${this.callId} sendVoipEvent() failed: we do not have opponentDeviceInfo`);
                     return;
                 }
 
-                await this.client.encryptAndSendToDevices(
-                    [
-                        {
-                            userId,
-                            deviceInfo: this.opponentDeviceInfo,
-                        },
-                    ],
-                    {
-                        type: eventType,
-                        content,
-                    },
-                );
+                // TODO: Here we were sending the event to the opponent's device as a to-device message with MatrixClient.encryptAndSendToDevices.
+                // However due to the switch to Rust cryptography we need to migrate to the new encryptToDeviceMessages API.
+                throw new Error("Unimplemented");
             } else {
                 await this.client.sendToDevice(
                     eventType,
@@ -3016,9 +3001,9 @@ export function supportsMatrixCall(): boolean {
     // is that the browser throwing a SecurityError will brick the client creation process.
     try {
         const supported = Boolean(
-            window.RTCPeerConnection ||
-                window.RTCSessionDescription ||
-                window.RTCIceCandidate ||
+            window.RTCPeerConnection ??
+                window.RTCSessionDescription ??
+                window.RTCIceCandidate ??
                 navigator.mediaDevices,
         );
         if (!supported) {

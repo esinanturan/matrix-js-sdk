@@ -23,44 +23,49 @@ limitations under the License.
  * for HTTP and WS at some point.
  */
 
-import { Optional } from "matrix-events-sdk";
+import { type Optional } from "matrix-events-sdk";
 
-import type { SyncCryptoCallbacks } from "./common-crypto/CryptoBackend";
-import { User } from "./models/user";
-import { NotificationCountType, Room, RoomEvent } from "./models/room";
-import { deepCopy, defer, IDeferred, noUnsafeEventProps, promiseMapSeries, unsafeProp } from "./utils";
-import { Filter } from "./filter";
-import { EventTimeline } from "./models/event-timeline";
-import { logger } from "./logger";
-import { ClientEvent, IStoredClientOpts, MatrixClient, PendingEventOrdering, ResetTimelineCallback } from "./client";
+import type { SyncCryptoCallbacks } from "./common-crypto/CryptoBackend.ts";
+import { User } from "./models/user.ts";
+import { NotificationCountType, Room, RoomEvent } from "./models/room.ts";
+import { deepCopy, defer, type IDeferred, noUnsafeEventProps, promiseMapSeries, unsafeProp } from "./utils.ts";
+import { Filter } from "./filter.ts";
+import { EventTimeline } from "./models/event-timeline.ts";
+import { logger } from "./logger.ts";
 import {
-    IEphemeral,
-    IInvitedRoom,
-    IInviteState,
-    IJoinedRoom,
-    ILeftRoom,
-    IKnockedRoom,
-    IMinimalEvent,
-    IRoomEvent,
-    IStateEvent,
-    IStrippedState,
-    ISyncResponse,
-    ITimeline,
-    IToDeviceEvent,
-} from "./sync-accumulator";
-import { MatrixEvent } from "./models/event";
-import { MatrixError, Method } from "./http-api";
-import { ISavedSync } from "./store";
-import { EventType } from "./@types/event";
-import { IPushRules } from "./@types/PushRules";
-import { RoomStateEvent, IMarkerFoundOptions } from "./models/room-state";
-import { RoomMemberEvent } from "./models/room-member";
-import { BeaconEvent } from "./models/beacon";
-import { IEventsResponse } from "./@types/requests";
-import { UNREAD_THREAD_NOTIFICATIONS } from "./@types/sync";
-import { Feature, ServerSupport } from "./feature";
-import { Crypto } from "./crypto";
-import { KnownMembership } from "./@types/membership";
+    ClientEvent,
+    type IStoredClientOpts,
+    type MatrixClient,
+    PendingEventOrdering,
+    type ResetTimelineCallback,
+} from "./client.ts";
+import {
+    type IEphemeral,
+    type IInvitedRoom,
+    type IInviteState,
+    type IJoinedRoom,
+    type ILeftRoom,
+    type IKnockedRoom,
+    type IMinimalEvent,
+    type IRoomEvent,
+    type IStateEvent,
+    type IStrippedState,
+    type ISyncResponse,
+    type ITimeline,
+    type IToDeviceEvent,
+} from "./sync-accumulator.ts";
+import { type MatrixEvent } from "./models/event.ts";
+import { type MatrixError, Method } from "./http-api/index.ts";
+import { type ISavedSync } from "./store/index.ts";
+import { EventType } from "./@types/event.ts";
+import { type IPushRules } from "./@types/PushRules.ts";
+import { RoomStateEvent, type IMarkerFoundOptions } from "./models/room-state.ts";
+import { RoomMemberEvent } from "./models/room-member.ts";
+import { BeaconEvent } from "./models/beacon.ts";
+import { type IEventsResponse } from "./@types/requests.ts";
+import { UNREAD_THREAD_NOTIFICATIONS } from "./@types/sync.ts";
+import { Feature, ServerSupport } from "./feature.ts";
+import { KnownMembership } from "./@types/membership.ts";
 
 const DEBUG = true;
 
@@ -117,13 +122,6 @@ function debuglog(...params: any[]): void {
  */
 export interface SyncApiOptions {
     /**
-     * Crypto manager
-     *
-     * @deprecated in favour of cryptoCallbacks
-     */
-    crypto?: Crypto;
-
-    /**
      * If crypto is enabled on our client, callbacks into the crypto module
      */
     cryptoCallbacks?: SyncCryptoCallbacks;
@@ -175,14 +173,15 @@ export enum SetPresence {
 }
 
 interface ISyncParams {
-    filter?: string;
-    timeout: number;
-    since?: string;
+    "filter"?: string;
+    "timeout": number;
+    "since"?: string;
     // eslint-disable-next-line camelcase
-    full_state?: boolean;
+    "full_state"?: boolean;
     // eslint-disable-next-line camelcase
-    set_presence?: SetPresence;
-    _cacheBuster?: string | number; // not part of the API itself
+    "set_presence"?: SetPresence;
+    "_cacheBuster"?: string | number; // not part of the API itself
+    "org.matrix.msc4222.use_state_after"?: boolean; // https://github.com/matrix-org/matrix-spec-proposals/pull/4222
 }
 
 type WrappedRoom<T> = T & {
@@ -344,8 +343,9 @@ export class SyncApi {
         );
 
         const qps: ISyncParams = {
-            timeout: 0, // don't want to block since this is a single isolated req
-            filter: filterId,
+            "timeout": 0, // don't want to block since this is a single isolated req
+            "filter": filterId,
+            "org.matrix.msc4222.use_state_after": true,
         };
 
         const data = await client.http.authedRequest<ISyncResponse>(Method.Get, "/sync", qps as any, undefined, {
@@ -375,21 +375,18 @@ export class SyncApi {
                     prev_batch: null,
                     events: [],
                 };
-                const events = this.mapSyncEventsFormat(leaveObj.timeline, room);
-
-                const stateEvents = this.mapSyncEventsFormat(leaveObj.state, room);
 
                 // set the back-pagination token. Do this *before* adding any
                 // events so that clients can start back-paginating.
                 room.getLiveTimeline().setPaginationToken(leaveObj.timeline.prev_batch, EventTimeline.BACKWARDS);
 
-                await this.injectRoomEvents(room, stateEvents, events);
+                const { timelineEvents } = await this.mapAndInjectRoomEvents(leaveObj);
 
                 room.recalculate();
                 client.store.storeRoom(room);
                 client.emit(ClientEvent.Room, room);
 
-                this.processEventsForNotifs(room, events);
+                this.processEventsForNotifs(room, timelineEvents);
                 return room;
             }),
         );
@@ -463,6 +460,7 @@ export class SyncApi {
             // it with the right thing.
             this._peekRoom.addEventsToTimeline(
                 messages.reverse(),
+                true,
                 true,
                 this._peekRoom.getLiveTimeline(),
                 response.messages.start,
@@ -551,7 +549,7 @@ export class SyncApi {
                         })
                         .map(this.client.getEventMapper());
 
-                    await peekRoom.addLiveEvents(events);
+                    await peekRoom.addLiveEvents(events, { addToState: true });
                     this.peekPoll(peekRoom, res.end);
                 },
                 (err) => {
@@ -642,9 +640,6 @@ export class SyncApi {
             }
             this.opts.filter.setLazyLoadMembers(true);
         }
-        if (this.opts.lazyLoadMembers) {
-            this.syncOpts.crypto?.enableLazyLoading();
-        }
     };
 
     private storeClientOptions = async (): Promise<void> => {
@@ -694,7 +689,7 @@ export class SyncApi {
         this.running = true;
         this.abortController = new AbortController();
 
-        global.window?.addEventListener?.("online", this.onOnline, false);
+        globalThis.window?.addEventListener?.("online", this.onOnline, false);
 
         if (this.client.isGuest()) {
             // no push rules for guests, no access to POST filter for guests.
@@ -779,10 +774,10 @@ export class SyncApi {
     public stop(): void {
         debuglog("SyncApi.stop");
         // It is necessary to check for the existance of
-        // global.window AND global.window.removeEventListener.
-        // Some platforms (e.g. React Native) register global.window,
-        // but do not have global.window.removeEventListener.
-        global.window?.removeEventListener?.("online", this.onOnline, false);
+        // globalThis.window AND globalThis.window.removeEventListener.
+        // Some platforms (e.g. React Native) register globalThis.window,
+        // but do not have globalThis.window.removeEventListener.
+        globalThis.window?.removeEventListener?.("online", this.onOnline, false);
         this.running = false;
         this.abortController?.abort();
         if (this.keepAliveTimer) {
@@ -880,12 +875,6 @@ export class SyncApi {
                 catchingUp: this.catchingUp,
             };
 
-            if (this.syncOpts.crypto) {
-                // tell the crypto module we're about to process a sync
-                // response
-                await this.syncOpts.crypto.onSyncWillProcess(syncEventData);
-            }
-
             try {
                 await this.processSyncResponse(syncEventData, data);
             } catch (e) {
@@ -920,15 +909,6 @@ export class SyncApi {
             this.updateSyncState(SyncState.Syncing, syncEventData);
 
             if (this.client.store.wantsSave()) {
-                // We always save the device list (if it's dirty) before saving the sync data:
-                // this means we know the saved device list data is at least as fresh as the
-                // stored sync data which means we don't have to worry that we may have missed
-                // device changes. We can also skip the delay since we're not calling this very
-                // frequently (and we don't really want to delay the sync for it).
-                if (this.syncOpts.crypto) {
-                    await this.syncOpts.crypto.saveDeviceList(0);
-                }
-
                 // tell databases that everything is now in a consistent state and can be saved.
                 await this.client.store.save();
             }
@@ -976,7 +956,11 @@ export class SyncApi {
             filter = this.getGuestFilter();
         }
 
-        const qps: ISyncParams = { filter, timeout };
+        const qps: ISyncParams = {
+            filter,
+            timeout,
+            "org.matrix.msc4222.use_state_after": true,
+        };
 
         if (this.opts.disablePresence) {
             qps.set_presence = SetPresence.Offline;
@@ -1242,28 +1226,7 @@ export class SyncApi {
             const room = inviteObj.room;
             const stateEvents = this.mapSyncEventsFormat(inviteObj.invite_state, room);
 
-            await this.injectRoomEvents(room, stateEvents);
-
-            const inviter = room.currentState.getStateEvents(EventType.RoomMember, client.getUserId()!)?.getSender();
-
-            const crypto = client.crypto;
-            if (crypto) {
-                const parkedHistory = await crypto.cryptoStore.takeParkedSharedHistory(room.roomId);
-                for (const parked of parkedHistory) {
-                    if (parked.senderId === inviter) {
-                        await crypto.olmDevice.addInboundGroupSession(
-                            room.roomId,
-                            parked.senderKey,
-                            parked.forwardingCurve25519KeyChain,
-                            parked.sessionId,
-                            parked.sessionKey,
-                            parked.keysClaimed,
-                            true,
-                            { sharedHistory: true, untrusted: true },
-                        );
-                    }
-                }
-            }
+            await this.injectRoomEvents(room, stateEvents, undefined);
 
             if (inviteObj.isBrandNewRoom) {
                 room.recalculate();
@@ -1282,15 +1245,24 @@ export class SyncApi {
         await promiseMapSeries(joinRooms, async (joinObj) => {
             const room = joinObj.room;
             const stateEvents = this.mapSyncEventsFormat(joinObj.state, room);
+            const stateAfterEvents = this.mapSyncEventsFormat(joinObj["org.matrix.msc4222.state_after"], room);
             // Prevent events from being decrypted ahead of time
             // this helps large account to speed up faster
             // room::decryptCriticalEvent is in charge of decrypting all the events
             // required for a client to function properly
-            const events = this.mapSyncEventsFormat(joinObj.timeline, room, false);
+            const timelineEvents = this.mapSyncEventsFormat(joinObj.timeline, room, false);
             const ephemeralEvents = this.mapSyncEventsFormat(joinObj.ephemeral);
             const accountDataEvents = this.mapSyncEventsFormat(joinObj.account_data);
 
-            const encrypted = this.isRoomEncrypted(room, stateEvents, events);
+            // If state_after is present, this is the events that form the state at the end of the timeline block and
+            // regular timeline events do *not* count towards state. If it's not present, then the state is formed by
+            // the state events plus the timeline events. Note mapSyncEventsFormat returns an empty array if the field
+            // is absent so we explicitly check the field on the original object.
+            const eventsFormingFinalState = joinObj["org.matrix.msc4222.state_after"]
+                ? stateAfterEvents
+                : stateEvents.concat(timelineEvents);
+
+            const encrypted = this.isRoomEncrypted(room, eventsFormingFinalState);
             // We store the server-provided value first so it's correct when any of the events fire.
             if (joinObj.unread_notifications) {
                 /**
@@ -1378,8 +1350,8 @@ export class SyncApi {
                 // which we'll try to paginate but not get any new events (which
                 // will stop us linking the empty timeline into the chain).
                 //
-                for (let i = events.length - 1; i >= 0; i--) {
-                    const eventId = events[i].getId()!;
+                for (let i = timelineEvents.length - 1; i >= 0; i--) {
+                    const eventId = timelineEvents[i].getId()!;
                     if (room.getTimelineForEvent(eventId)) {
                         debuglog(`Already have event ${eventId} in limited sync - not resetting`);
                         limited = false;
@@ -1387,7 +1359,7 @@ export class SyncApi {
                         // we might still be missing some of the events before i;
                         // we don't want to be adding them to the end of the
                         // timeline because that would put them out of order.
-                        events.splice(0, i);
+                        timelineEvents.splice(0, i);
 
                         // XXX: there's a problem here if the skipped part of the
                         // timeline modifies the state set in stateEvents, because
@@ -1419,8 +1391,9 @@ export class SyncApi {
             // avoids a race condition if the application tries to send a message after the
             // state event is processed, but before crypto is enabled, which then causes the
             // crypto layer to complain.
+
             if (this.syncOpts.cryptoCallbacks) {
-                for (const e of stateEvents.concat(events)) {
+                for (const e of eventsFormingFinalState) {
                     if (e.isState() && e.getType() === EventType.RoomEncryption && e.getStateKey() === "") {
                         await this.syncOpts.cryptoCallbacks.onCryptoEvent(room, e);
                     }
@@ -1428,7 +1401,17 @@ export class SyncApi {
             }
 
             try {
-                await this.injectRoomEvents(room, stateEvents, events, syncEventData.fromCache);
+                if ("org.matrix.msc4222.state_after" in joinObj) {
+                    await this.injectRoomEvents(
+                        room,
+                        undefined,
+                        stateAfterEvents,
+                        timelineEvents,
+                        syncEventData.fromCache,
+                    );
+                } else {
+                    await this.injectRoomEvents(room, stateEvents, undefined, timelineEvents, syncEventData.fromCache);
+                }
             } catch (e) {
                 logger.error(`Failed to process events on room ${room.roomId}:`, e);
             }
@@ -1452,11 +1435,11 @@ export class SyncApi {
                 client.emit(ClientEvent.Room, room);
             }
 
-            this.processEventsForNotifs(room, events);
+            this.processEventsForNotifs(room, timelineEvents);
 
             const emitEvent = (e: MatrixEvent): boolean => client.emit(ClientEvent.Event, e);
             stateEvents.forEach(emitEvent);
-            events.forEach(emitEvent);
+            timelineEvents.forEach(emitEvent);
             ephemeralEvents.forEach(emitEvent);
             accountDataEvents.forEach(emitEvent);
 
@@ -1469,11 +1452,9 @@ export class SyncApi {
         // Handle leaves (e.g. kicked rooms)
         await promiseMapSeries(leaveRooms, async (leaveObj) => {
             const room = leaveObj.room;
-            const stateEvents = this.mapSyncEventsFormat(leaveObj.state, room);
-            const events = this.mapSyncEventsFormat(leaveObj.timeline, room);
+            const { timelineEvents, stateEvents, stateAfterEvents } = await this.mapAndInjectRoomEvents(leaveObj);
             const accountDataEvents = this.mapSyncEventsFormat(leaveObj.account_data);
 
-            await this.injectRoomEvents(room, stateEvents, events);
             room.addAccountData(accountDataEvents);
 
             room.recalculate();
@@ -1482,12 +1463,15 @@ export class SyncApi {
                 client.emit(ClientEvent.Room, room);
             }
 
-            this.processEventsForNotifs(room, events);
+            this.processEventsForNotifs(room, timelineEvents);
 
-            stateEvents.forEach(function (e) {
+            stateEvents?.forEach(function (e) {
                 client.emit(ClientEvent.Event, e);
             });
-            events.forEach(function (e) {
+            stateAfterEvents?.forEach(function (e) {
+                client.emit(ClientEvent.Event, e);
+            });
+            timelineEvents.forEach(function (e) {
                 client.emit(ClientEvent.Event, e);
             });
             accountDataEvents.forEach(function (e) {
@@ -1500,7 +1484,7 @@ export class SyncApi {
             const room = knockObj.room;
             const stateEvents = this.mapSyncEventsFormat(knockObj.knock_state, room);
 
-            await this.injectRoomEvents(room, stateEvents);
+            await this.injectRoomEvents(room, stateEvents, undefined);
 
             if (knockObj.isBrandNewRoom) {
                 room.recalculate();
@@ -1525,7 +1509,7 @@ export class SyncApi {
                 return a.getTs() - b.getTs();
             });
             this.notifEvents.forEach(function (event) {
-                client.getNotifTimelineSet()?.addLiveEvent(event);
+                client.getNotifTimelineSet()?.addLiveEvent(event, { addToState: true });
             });
         }
 
@@ -1669,7 +1653,7 @@ export class SyncApi {
     }
 
     private mapSyncEventsFormat(
-        obj: IInviteState | ITimeline | IEphemeral,
+        obj: IInviteState | ITimeline | IEphemeral | undefined,
         room?: Room,
         decrypt = true,
     ): MatrixEvent[] {
@@ -1737,28 +1721,69 @@ export class SyncApi {
 
     // When processing the sync response we cannot rely on Room.hasEncryptionStateEvent we actually
     // inject the events into the room object, so we have to inspect the events themselves.
-    private isRoomEncrypted(room: Room, stateEventList: MatrixEvent[], timelineEventList?: MatrixEvent[]): boolean {
-        return (
-            room.hasEncryptionStateEvent() ||
-            !!this.findEncryptionEvent(stateEventList) ||
-            !!this.findEncryptionEvent(timelineEventList)
+    private isRoomEncrypted(room: Room, eventsFormingFinalState: MatrixEvent[]): boolean {
+        return room.hasEncryptionStateEvent() || !!this.findEncryptionEvent(eventsFormingFinalState);
+    }
+
+    private async mapAndInjectRoomEvents(wrappedRoom: WrappedRoom<ILeftRoom>): Promise<{
+        timelineEvents: MatrixEvent[];
+        stateEvents?: MatrixEvent[];
+        stateAfterEvents?: MatrixEvent[];
+    }> {
+        const stateEvents = this.mapSyncEventsFormat(wrappedRoom.state, wrappedRoom.room);
+        const stateAfterEvents = this.mapSyncEventsFormat(
+            wrappedRoom["org.matrix.msc4222.state_after"],
+            wrappedRoom.room,
         );
+        const timelineEvents = this.mapSyncEventsFormat(wrappedRoom.timeline, wrappedRoom.room);
+
+        if ("org.matrix.msc4222.state_after" in wrappedRoom) {
+            await this.injectRoomEvents(wrappedRoom.room, undefined, stateAfterEvents, timelineEvents);
+        } else {
+            await this.injectRoomEvents(wrappedRoom.room, stateEvents, undefined, timelineEvents);
+        }
+
+        return { timelineEvents, stateEvents, stateAfterEvents };
     }
 
     /**
      * Injects events into a room's model.
      * @param stateEventList - A list of state events. This is the state
      * at the *START* of the timeline list if it is supplied.
+     * @param stateAfterEventList - A list of state events. This is the state
+     * at the *END* of the timeline list if it is supplied.
      * @param timelineEventList - A list of timeline events, including threaded. Lower index
      * is earlier in time. Higher index is later.
      * @param fromCache - whether the sync response came from cache
+     *
+     * No more than one of stateEventList and stateAfterEventList must be supplied. If
+     * stateEventList is supplied, the events in timelineEventList are added to the state
+     * after stateEventList. If stateAfterEventList is supplied, the events in timelineEventList
+     * are not added to the state.
      */
     public async injectRoomEvents(
         room: Room,
         stateEventList: MatrixEvent[],
+        stateAfterEventList: undefined,
+        timelineEventList?: MatrixEvent[],
+        fromCache?: boolean,
+    ): Promise<void>;
+    public async injectRoomEvents(
+        room: Room,
+        stateEventList: undefined,
+        stateAfterEventList: MatrixEvent[],
+        timelineEventList?: MatrixEvent[],
+        fromCache?: boolean,
+    ): Promise<void>;
+    public async injectRoomEvents(
+        room: Room,
+        stateEventList: MatrixEvent[] | undefined,
+        stateAfterEventList: MatrixEvent[] | undefined,
         timelineEventList?: MatrixEvent[],
         fromCache = false,
     ): Promise<void> {
+        const eitherStateEventList = stateAfterEventList ?? stateEventList!;
+
         // If there are no events in the timeline yet, initialise it with
         // the given state events
         const liveTimeline = room.getLiveTimeline();
@@ -1772,10 +1797,11 @@ export class SyncApi {
             // push actions cache elsewhere so we can freeze MatrixEvents, or otherwise
             // find some solution where MatrixEvents are immutable but allow for a cache
             // field.
-            for (const ev of stateEventList) {
+
+            for (const ev of eitherStateEventList) {
                 this.client.getPushActionsForEvent(ev);
             }
-            liveTimeline.initialiseState(stateEventList, {
+            liveTimeline.initialiseState(eitherStateEventList, {
                 timelineWasEmpty,
             });
         }
@@ -1807,17 +1833,18 @@ export class SyncApi {
             // XXX: As above, don't do this...
             //room.addLiveEvents(stateEventList || []);
             // Do this instead...
-            room.oldState.setStateEvents(stateEventList || []);
-            room.currentState.setStateEvents(stateEventList || []);
+            room.oldState.setStateEvents(eitherStateEventList);
+            room.currentState.setStateEvents(eitherStateEventList);
         }
 
-        // Execute the timeline events. This will continue to diverge the current state
-        // if the timeline has any state events in it.
+        // Execute the timeline events. If addToState is true the timeline has any state
+        // events in it, this will continue to diverge the current state.
         // This also needs to be done before running push rules on the events as they need
         // to be decorated with sender etc.
         await room.addLiveEvents(timelineEventList || [], {
             fromCache,
             timelineWasEmpty,
+            addToState: stateAfterEventList === undefined,
         });
         this.client.processBeaconEvents(room, timelineEventList);
     }

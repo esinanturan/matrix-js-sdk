@@ -14,14 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { OlmMachine, CrossSigningStatus, CrossSigningBootstrapRequests } from "@matrix-org/matrix-sdk-crypto-wasm";
-import * as RustSdkCryptoJs from "@matrix-org/matrix-sdk-crypto-wasm";
+import {
+    type OlmMachine,
+    type CrossSigningStatus,
+    type CrossSigningBootstrapRequests,
+} from "@matrix-org/matrix-sdk-crypto-wasm";
 
-import { BootstrapCrossSigningOpts } from "../crypto-api";
-import { logger } from "../logger";
-import { OutgoingRequestProcessor } from "./OutgoingRequestProcessor";
-import { UIAuthCallback } from "../interactive-auth";
-import { ServerSideSecretStorage } from "../secret-storage";
+import type * as RustSdkCryptoJs from "@matrix-org/matrix-sdk-crypto-wasm";
+import { type BootstrapCrossSigningOpts } from "../crypto-api/index.ts";
+import { logger } from "../logger.ts";
+import { type OutgoingRequestProcessor } from "./OutgoingRequestProcessor.ts";
+import { type UIAuthCallback } from "../interactive-auth.ts";
+import { type ServerSideSecretStorage } from "../secret-storage.ts";
 
 /** Manages the cross-signing keys for our own user.
  *
@@ -87,17 +91,23 @@ export class CrossSigningIdentity {
                     "bootstrapCrossSigning: Cross-signing private keys not found locally, but they are available " +
                         "in secret storage, reading storage and caching locally",
                 );
-                await this.olmMachine.importCrossSigningKeys(
+                const status = await this.olmMachine.importCrossSigningKeys(
                     masterKeyFromSecretStorage,
                     selfSigningKeyFromSecretStorage,
                     userSigningKeyFromSecretStorage,
                 );
 
+                // Check that `importCrossSigningKeys` worked correctly (for example, it will fail silently if the
+                // public keys are not available).
+                if (!status.hasMaster || !status.hasSelfSigning || !status.hasUserSigning) {
+                    throw new Error("importCrossSigningKeys failed to import the keys");
+                }
+
                 // Get the current device
-                const device: RustSdkCryptoJs.Device = await this.olmMachine.getDevice(
+                const device: RustSdkCryptoJs.Device = (await this.olmMachine.getDevice(
                     this.olmMachine.userId,
                     this.olmMachine.deviceId,
-                );
+                ))!;
                 try {
                     // Sign the device with our cross-signing key and upload the signature
                     const request: RustSdkCryptoJs.SignatureUploadRequest = await device.verify();
@@ -140,11 +150,11 @@ export class CrossSigningIdentity {
             // Update 4S before uploading cross-signing keys, to stay consistent with legacy that asks
             // 4S passphrase before asking for account password.
             // Ultimately should be made atomic and resistant to forgotten password/passphrase.
-            logger.log("resetCrossSigning: exporting to secret storage");
-
+            logger.log("resetCrossSigning: exporting private keys to secret storage");
             await this.exportCrossSigningKeysToStorage();
         }
-        logger.log("resetCrossSigning: publishing keys to server");
+
+        logger.log("resetCrossSigning: publishing public keys to server");
         for (const req of [
             outgoingRequests.uploadKeysRequest,
             outgoingRequests.uploadSigningKeysRequest,
@@ -162,7 +172,8 @@ export class CrossSigningIdentity {
      * (If secret storage is *not* configured, we assume that the export will happen when it is set up)
      */
     private async exportCrossSigningKeysToStorage(): Promise<void> {
-        const exported: RustSdkCryptoJs.CrossSigningKeyExport | null = await this.olmMachine.exportCrossSigningKeys();
+        const exported: RustSdkCryptoJs.CrossSigningKeyExport | undefined =
+            await this.olmMachine.exportCrossSigningKeys();
         /* istanbul ignore else (this function is only called when we know the olm machine has keys) */
         if (exported?.masterKey) {
             await this.secretStorage.store("m.cross_signing.master", exported.masterKey);

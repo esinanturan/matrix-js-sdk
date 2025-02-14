@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { ISavedSync } from "./index";
-import { IEvent, IStateEventWithRoomId, IStoredClientOpts, ISyncResponse } from "../matrix";
-import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
+import { type ISavedSync } from "./index.ts";
+import { type IEvent, type IStateEventWithRoomId, type IStoredClientOpts, type ISyncResponse } from "../matrix.ts";
+import { type IndexedToDeviceBatch, type ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage.ts";
 
 export interface IIndexedDBBackend {
     connect(onClose?: () => void): Promise<void>;

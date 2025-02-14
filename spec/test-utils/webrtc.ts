@@ -15,32 +15,33 @@ limitations under the License.
 */
 
 import {
-    ClientEvent,
-    ClientEventHandlerMap,
+    type ClientEvent,
+    type ClientEventHandlerMap,
+    type EmptyObject,
     EventType,
-    GroupCall,
+    type GroupCall,
     GroupCallIntent,
     GroupCallType,
-    IContent,
-    ISendEventResponse,
-    MatrixClient,
-    MatrixEvent,
-    Room,
+    type IContent,
+    type ISendEventResponse,
+    type MatrixClient,
+    type MatrixEvent,
+    type Room,
     RoomMember,
-    RoomState,
+    type RoomState,
     RoomStateEvent,
-    RoomStateEventHandlerMap,
-    SendToDeviceContentMap,
+    type RoomStateEventHandlerMap,
+    type SendToDeviceContentMap,
 } from "../../src";
 import { TypedEventEmitter } from "../../src/models/typed-event-emitter";
 import { ReEmitter } from "../../src/ReEmitter";
 import { SyncState } from "../../src/sync";
-import { CallEvent, CallEventHandlerMap, CallState, MatrixCall } from "../../src/webrtc/call";
-import { CallEventHandlerEvent, CallEventHandlerEventHandlerMap } from "../../src/webrtc/callEventHandler";
-import { CallFeed } from "../../src/webrtc/callFeed";
-import { GroupCallEventHandlerMap } from "../../src/webrtc/groupCall";
-import { GroupCallEventHandlerEvent } from "../../src/webrtc/groupCallEventHandler";
-import { IScreensharingOpts, MediaHandler } from "../../src/webrtc/mediaHandler";
+import { type CallEvent, type CallEventHandlerMap, CallState, type MatrixCall } from "../../src/webrtc/call";
+import { type CallEventHandlerEvent, type CallEventHandlerEventHandlerMap } from "../../src/webrtc/callEventHandler";
+import { type CallFeed } from "../../src/webrtc/callFeed";
+import { type GroupCallEventHandlerMap } from "../../src/webrtc/groupCall";
+import { type GroupCallEventHandlerEvent } from "../../src/webrtc/groupCallEventHandler";
+import { type IScreensharingOpts, type MediaHandler } from "../../src/webrtc/mediaHandler";
 
 export const DUMMY_SDP =
     "v=0\r\n" +
@@ -147,10 +148,13 @@ export class MockRTCPeerConnection {
     }
 
     constructor() {
-        this.localDescription = {
+        const localDescriptionJSON = {
             sdp: DUMMY_SDP,
-            type: "offer",
-            toJSON: function () {},
+            type: "offer" as RTCSdpType,
+        };
+        this.localDescription = {
+            toJSON: () => localDescriptionJSON,
+            ...localDescriptionJSON,
         };
 
         this.readyToNegotiate = new Promise<void>((resolve) => {
@@ -265,7 +269,7 @@ export class MockRTCRtpTransceiver {
         this.peerConn.needsNegotiation = true;
     }
 
-    public setCodecPreferences = jest.fn<void, RTCRtpCodecCapability[]>();
+    public setCodecPreferences = jest.fn<void, RTCRtpCodec[]>();
 }
 
 export class MockMediaStreamTrack {
@@ -463,7 +467,7 @@ export class MockCallMatrixClient extends TypedEventEmitter<EmittedEvents, Emitt
         [roomId: string, eventType: EventType, content: any, statekey: string]
     >();
     public sendToDevice = jest.fn<
-        Promise<{}>,
+        Promise<EmptyObject>,
         [eventType: string, contentMap: SendToDeviceContentMap, txnId?: string]
     >();
 
@@ -476,6 +480,9 @@ export class MockCallMatrixClient extends TypedEventEmitter<EmittedEvents, Emitt
     }
 
     public getUserId(): string {
+        return this.userId;
+    }
+    public getSafeUserId(): string {
         return this.userId;
     }
 
@@ -579,11 +586,11 @@ export class MockCallFeed {
 }
 
 export function installWebRTCMocks() {
-    global.navigator = {
+    globalThis.navigator = {
         mediaDevices: new MockMediaDevices().typed(),
     } as unknown as Navigator;
 
-    global.window = {
+    globalThis.window = {
         // @ts-ignore Mock
         RTCPeerConnection: MockRTCPeerConnection,
         // @ts-ignore Mock
@@ -593,13 +600,13 @@ export function installWebRTCMocks() {
         getUserMedia: () => new MockMediaStream("local_stream"),
     };
     // @ts-ignore Mock
-    global.document = {};
+    globalThis.document = {};
 
     // @ts-ignore Mock
-    global.AudioContext = MockAudioContext;
+    globalThis.AudioContext = MockAudioContext;
 
     // @ts-ignore Mock
-    global.RTCRtpReceiver = {
+    globalThis.RTCRtpReceiver = {
         getCapabilities: jest.fn<RTCRtpCapabilities, [string]>().mockReturnValue({
             codecs: [],
             headerExtensions: [],
@@ -607,7 +614,7 @@ export function installWebRTCMocks() {
     };
 
     // @ts-ignore Mock
-    global.RTCRtpSender = {
+    globalThis.RTCRtpSender = {
         getCapabilities: jest.fn<RTCRtpCapabilities, [string]>().mockReturnValue({
             codecs: [],
             headerExtensions: [],

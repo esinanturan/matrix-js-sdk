@@ -17,11 +17,11 @@ limitations under the License.
 import MockHttpBackend from "matrix-mock-request";
 import { indexedDB as fakeIndexedDB } from "fake-indexeddb";
 
-import { IndexedDBStore, MatrixEvent, MemoryStore, Room } from "../../src";
+import { IndexedDBStore, MatrixEvent, MemoryStore, type Room } from "../../src";
 import { MatrixClient } from "../../src/client";
-import { ToDeviceBatch } from "../../src/models/ToDeviceMessage";
+import { type ToDeviceBatch } from "../../src/models/ToDeviceMessage";
 import { logger } from "../../src/logger";
-import { IStore } from "../../src/store";
+import { type IStore } from "../../src/store";
 import { flushPromises } from "../test-utils/flushPromises";
 import { removeElement } from "../../src/utils";
 
@@ -82,7 +82,7 @@ describe.each([[StoreType.Memory], [StoreType.IndexedDB]])("queueToDevice (%s st
             client = new MatrixClient({
                 baseUrl: "https://my.home.server",
                 accessToken: "my.access.token",
-                fetchFn: httpBackend.fetchFn as typeof global.fetch,
+                fetchFn: httpBackend.fetchFn as typeof globalThis.fetch,
                 store,
             });
         });
@@ -256,7 +256,7 @@ describe.each([[StoreType.Memory], [StoreType.IndexedDB]])("queueToDevice (%s st
             client = new MatrixClient({
                 baseUrl: "https://my.home.server",
                 accessToken: "my.access.token",
-                fetchFn: httpBackend.fetchFn as typeof global.fetch,
+                fetchFn: httpBackend.fetchFn as typeof globalThis.fetch,
                 store,
             });
         });

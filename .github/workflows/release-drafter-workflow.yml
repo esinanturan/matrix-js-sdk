@@ -8,9 +8,12 @@ on:
                 type: string
                 required: false
 concurrency: release-drafter-action
+permissions: {}
 jobs:
     draft:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
+        permissions:
+            contents: write
         steps:
             - name: 🧮 Checkout code
               uses: actions/checkout@v4
@@ -56,7 +59,7 @@ jobs:
                   script: |
                       const { RELEASE_ID: releaseId, DEPENDENCY, VERSION } = process.env;
                       const { owner, repo } = context.repo;
-                      const script = require("./.action-repo/scripts/release/merge-release-notes.js");
+                      const script = require("./.action-repo/scripts/release/merge-release-notes.cjs");
 
                       let deps = [];
                       if (DEPENDENCY.includes("/")) {

@@ -18,13 +18,19 @@ limitations under the License.
  * This is an internal module. See {@link MatrixHttpApi} for the public class.
  */
 
-import { checkObjectHasKeys, encodeParams } from "../utils";
-import { TypedEventEmitter } from "../models/typed-event-emitter";
-import { Method } from "./method";
-import { ConnectionError, MatrixError } from "./errors";
-import { HttpApiEvent, HttpApiEventHandlerMap, IHttpOpts, IRequestOpts, Body } from "./interface";
-import { anySignal, parseErrorResponse, timeoutSignal } from "./utils";
-import { QueryDict } from "../utils";
+import { checkObjectHasKeys, encodeParams } from "../utils.ts";
+import { type TypedEventEmitter } from "../models/typed-event-emitter.ts";
+import { Method } from "./method.ts";
+import { ConnectionError, type MatrixError } from "./errors.ts";
+import {
+    HttpApiEvent,
+    type HttpApiEventHandlerMap,
+    type IHttpOpts,
+    type IRequestOpts,
+    type Body,
+} from "./interface.ts";
+import { anySignal, parseErrorResponse, timeoutSignal } from "./utils.ts";
+import { type QueryDict } from "../utils.ts";
 
 interface TypedResponse<T> extends Response {
     json(): Promise<T>;
@@ -53,11 +59,11 @@ export class FetchHttpApi<O extends IHttpOpts> {
         this.abortController = new AbortController();
     }
 
-    public fetch(resource: URL | string, options?: RequestInit): ReturnType<typeof global.fetch> {
+    public fetch(resource: URL | string, options?: RequestInit): ReturnType<typeof globalThis.fetch> {
         if (this.opts.fetchFn) {
             return this.opts.fetchFn(resource, options);
         }
-        return global.fetch(resource, options);
+        return globalThis.fetch(resource, options);
     }
 
     /**
@@ -68,7 +74,7 @@ export class FetchHttpApi<O extends IHttpOpts> {
         this.opts.idBaseUrl = url;
     }
 
-    public idServerRequest<T extends {} = Record<string, unknown>>(
+    public idServerRequest<T extends object = Record<string, unknown>>(
         method: Method,
         path: string,
         params: Record<string, string | string[]> | undefined,
@@ -356,7 +362,7 @@ export class FetchHttpApi<O extends IHttpOpts> {
             const sanitizedQsUrlPiece = sanitizedQsString ? `?${sanitizedQsString}` : "";
 
             return asUrl.origin + asUrl.pathname + sanitizedQsUrlPiece;
-        } catch (error) {
+        } catch {
             // defensive coding for malformed url
             return "??";
         }

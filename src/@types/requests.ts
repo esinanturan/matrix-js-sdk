@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { IContent, IEvent } from "../models/event";
-import { Preset, Visibility } from "./partials";
-import { IEventWithRoomId, SearchKey } from "./search";
-import { IRoomEventFilter } from "../filter";
-import { Direction } from "../models/event-timeline";
-import { PushRuleAction } from "./PushRules";
-import { IRoomEvent } from "../sync-accumulator";
-import { EventType, RelationType, RoomType } from "./event";
+import { type IContent, type IEvent } from "../models/event.ts";
+import { type Preset, type Visibility } from "./partials.ts";
+import { type IEventWithRoomId, type SearchKey } from "./search.ts";
+import { type IRoomEventFilter } from "../filter.ts";
+import { type Direction } from "../models/event-timeline.ts";
+import { type PushRuleAction } from "./PushRules.ts";
+import { type IRoomEvent } from "../sync-accumulator.ts";
+import { type EventType, type RelationType, type RoomType } from "./event.ts";
 
 // allow camelcase as these are things that go onto the wire
 /* eslint-disable camelcase */
@@ -111,18 +111,16 @@ type DelayedPartialTimelineEvent = {
 
 type DelayedPartialStateEvent = DelayedPartialTimelineEvent & {
     state_key: string;
-    transaction_id: string;
 };
 
 type DelayedPartialEvent = DelayedPartialTimelineEvent | DelayedPartialStateEvent;
 
 export type DelayedEventInfo = {
-    delayed_events: DelayedPartialEvent &
+    delayed_events: (DelayedPartialEvent &
         SendDelayedEventResponse &
-        SendDelayedEventRequestOpts &
-        {
+        SendDelayedEventRequestOpts & {
             running_since: number;
-        }[];
+        })[];
     next_batch?: string;
 };
 

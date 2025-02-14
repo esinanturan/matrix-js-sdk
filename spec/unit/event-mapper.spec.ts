@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { MatrixClient, MatrixEvent, MatrixEventEvent, MatrixScheduler, Room } from "../../src";
+import { MatrixClient, MatrixEvent, MatrixEventEvent, type MatrixScheduler, Room } from "../../src";
 import { eventMapperFor } from "../../src/event-mapper";
-import { IStore } from "../../src/store";
+import { type IStore } from "../../src/store";
 
 describe("eventMapperFor", function () {
     let rooms: Room[] = [];
@@ -74,7 +74,7 @@ describe("eventMapperFor", function () {
         const event = mapper(eventDefinition);
         expect(event).toBeInstanceOf(MatrixEvent);
 
-        room.addLiveEvents([event]);
+        room.addLiveEvents([event], { addToState: false });
         expect(room.findEventById(eventId)).toBe(event);
 
         const event2 = mapper(eventDefinition);
@@ -109,7 +109,7 @@ describe("eventMapperFor", function () {
 
         room.oldState.setStateEvents([event]);
         room.currentState.setStateEvents([event]);
-        room.addLiveEvents([event]);
+        room.addLiveEvents([event], { addToState: false });
         expect(room.findEventById(eventId)).toBe(event);
 
         const event2 = mapper(eventDefinition);

@@ -16,14 +16,19 @@ limitations under the License.
 
 import { QrCodeMode } from "@matrix-org/matrix-sdk-crypto-wasm";
 
-import { ClientRendezvousFailureReason, MSC4108FailureReason, RendezvousError, RendezvousFailureListener } from ".";
-import { MatrixClient } from "../client";
-import { logger } from "../logger";
-import { MSC4108SecureChannel } from "./channels/MSC4108SecureChannel";
-import { MatrixError } from "../http-api";
-import { sleep } from "../utils";
-import { DEVICE_CODE_SCOPE, discoverAndValidateOIDCIssuerWellKnown, OidcClientConfig } from "../oidc";
-import { CryptoApi } from "../crypto-api";
+import {
+    ClientRendezvousFailureReason,
+    MSC4108FailureReason,
+    RendezvousError,
+    type RendezvousFailureListener,
+} from "./index.ts";
+import { type MatrixClient } from "../client.ts";
+import { logger } from "../logger.ts";
+import { type MSC4108SecureChannel } from "./channels/MSC4108SecureChannel.ts";
+import { MatrixError } from "../http-api/index.ts";
+import { sleep } from "../utils.ts";
+import { DEVICE_CODE_SCOPE, type OidcClientConfig } from "../oidc/index.ts";
+import { type CryptoApi } from "../crypto-api/index.ts";
 
 /**
  * Enum representing the payload types transmissible over [MSC4108](https://github.com/matrix-org/matrix-spec-proposals/pull/4108)
@@ -184,13 +189,12 @@ export class MSC4108SignInWithQR {
                 // MSC4108-Flow: NewScanned -send protocols message
                 let oidcClientConfig: OidcClientConfig | undefined;
                 try {
-                    const { issuer } = await this.client!.getAuthIssuer();
-                    oidcClientConfig = await discoverAndValidateOIDCIssuerWellKnown(issuer);
+                    oidcClientConfig = await this.client!.getAuthMetadata();
                 } catch (e) {
                     logger.error("Failed to discover OIDC metadata", e);
                 }
 
-                if (oidcClientConfig?.metadata.grant_types_supported.includes(DEVICE_CODE_SCOPE)) {
+                if (oidcClientConfig?.grant_types_supported.includes(DEVICE_CODE_SCOPE)) {
                     await this.send<ProtocolsPayload>({
                         type: PayloadType.Protocols,
                         protocols: ["device_authorization_grant"],

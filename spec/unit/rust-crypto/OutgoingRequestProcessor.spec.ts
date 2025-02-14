@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import MockHttpBackend from "matrix-mock-request";
-import { Mocked } from "jest-mock";
+import { type Mocked } from "jest-mock";
 import * as RustSdkCryptoJs from "@matrix-org/matrix-sdk-crypto-wasm";
 import {
     KeysBackupRequest,
@@ -31,7 +31,13 @@ import {
 import fetchMock from "fetch-mock-jest";
 
 import { TypedEventEmitter } from "../../../src";
-import { HttpApiEvent, HttpApiEventHandlerMap, IHttpOpts, MatrixHttpApi, UIAuthCallback } from "../../../src";
+import {
+    type HttpApiEvent,
+    type HttpApiEventHandlerMap,
+    type IHttpOpts,
+    MatrixHttpApi,
+    type UIAuthCallback,
+} from "../../../src";
 import { OutgoingRequestProcessor } from "../../../src/rust-crypto/OutgoingRequestProcessor";
 import { defer } from "../../../src/utils";
 
@@ -50,6 +56,7 @@ describe("OutgoingRequestProcessor", () => {
         return new Promise((resolve, _reject) => {
             olmMachine.markRequestAsSent.mockImplementationOnce(async () => {
                 resolve(undefined);
+                return true;
             });
         });
     }
@@ -61,7 +68,7 @@ describe("OutgoingRequestProcessor", () => {
         const httpApi = new MatrixHttpApi(dummyEventEmitter, {
             baseUrl: "https://example.com",
             prefix: "/_matrix",
-            fetchFn: httpBackend.fetchFn as typeof global.fetch,
+            fetchFn: httpBackend.fetchFn as typeof globalThis.fetch,
             onlyData: true,
         });
 
@@ -208,7 +215,7 @@ describe("OutgoingRequestProcessor", () => {
         const outgoingRequest = new UploadSigningKeysRequest(JSON.stringify(testReq));
 
         // also create a UIA callback
-        const authCallback: UIAuthCallback<Object> = async (makeRequest) => {
+        const authCallback: UIAuthCallback<object> = async (makeRequest) => {
             return await makeRequest({ type: "test" });
         };
 
@@ -458,7 +465,7 @@ describe("OutgoingRequestProcessor", () => {
                     throw new Error("Failed to fetch");
                 }
             });
-            const authCallback: UIAuthCallback<Object> = async (makeRequest) => {
+            const authCallback: UIAuthCallback<object> = async (makeRequest) => {
                 return await makeRequest({ type: "test" });
             };
             const requestPromise = processor.makeOutgoingRequest(outgoingRequest, authCallback);

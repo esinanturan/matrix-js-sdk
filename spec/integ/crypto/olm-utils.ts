@@ -17,11 +17,19 @@ limitations under the License.
 import Olm from "@matrix-org/olm";
 import anotherjson from "another-json";
 
-import { IContent, IDeviceKeys, IDownloadKeyResult, IEvent, Keys, MatrixClient, SigningKeys } from "../../../src";
-import { IE2EKeyReceiver } from "../../test-utils/E2EKeyReceiver";
-import { ISyncResponder } from "../../test-utils/SyncResponder";
+import {
+    type IContent,
+    type IDeviceKeys,
+    type IDownloadKeyResult,
+    type IEvent,
+    type Keys,
+    type MatrixClient,
+    type SigningKeys,
+} from "../../../src";
+import { type IE2EKeyReceiver } from "../../test-utils/E2EKeyReceiver";
+import { type ISyncResponder } from "../../test-utils/SyncResponder";
 import { syncPromise } from "../../test-utils/test-utils";
-import { KeyBackupInfo } from "../../../src/crypto-api";
+import { type KeyBackupInfo } from "../../../src/crypto-api";
 
 /**
  * @module
@@ -85,15 +93,15 @@ export function bootstrapCrossSigningTestOlmAccount(
     deviceId: string,
     keyBackupInfo: KeyBackupInfo[] = [],
 ): Partial<IDownloadKeyResult> {
-    const olmAliceMSK = new global.Olm.PkSigning();
+    const olmAliceMSK = new globalThis.Olm.PkSigning();
     const masterPrivkey = olmAliceMSK.generate_seed();
     const masterPubkey = olmAliceMSK.init_with_seed(masterPrivkey);
 
-    const olmAliceUSK = new global.Olm.PkSigning();
+    const olmAliceUSK = new globalThis.Olm.PkSigning();
     const userPrivkey = olmAliceUSK.generate_seed();
     const userPubkey = olmAliceUSK.init_with_seed(userPrivkey);
 
-    const olmAliceSSK = new global.Olm.PkSigning();
+    const olmAliceSSK = new globalThis.Olm.PkSigning();
     const sskPrivkey = olmAliceSSK.generate_seed();
     const sskPubkey = olmAliceSSK.init_with_seed(sskPrivkey);
 
@@ -181,7 +189,7 @@ export async function createOlmSession(
     const otkId = Object.keys(keys)[0];
     const otk = keys[otkId];
 
-    const session = new global.Olm.Session();
+    const session = new globalThis.Olm.Session();
     session.create_outbound(olmAccount, recipientTestClient.getDeviceKey(), otk.key);
     return session;
 }

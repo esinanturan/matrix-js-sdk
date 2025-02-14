@@ -14,39 +14,44 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import type { SyncCryptoCallbacks } from "./common-crypto/CryptoBackend";
-import { NotificationCountType, Room, RoomEvent } from "./models/room";
-import { logger } from "./logger";
-import { promiseMapSeries } from "./utils";
-import { EventTimeline } from "./models/event-timeline";
-import { ClientEvent, IStoredClientOpts, MatrixClient } from "./client";
+import type { SyncCryptoCallbacks } from "./common-crypto/CryptoBackend.ts";
+import { NotificationCountType, Room, RoomEvent } from "./models/room.ts";
+import { logger } from "./logger.ts";
+import { promiseMapSeries } from "./utils.ts";
+import { EventTimeline } from "./models/event-timeline.ts";
+import { ClientEvent, type IStoredClientOpts, type MatrixClient } from "./client.ts";
 import {
-    ISyncStateData,
+    type ISyncStateData,
     SyncState,
     _createAndReEmitRoom,
-    SyncApiOptions,
+    type SyncApiOptions,
     defaultClientOpts,
     defaultSyncApiOpts,
-    SetPresence,
-} from "./sync";
-import { MatrixEvent } from "./models/event";
-import { Crypto } from "./crypto";
-import { IMinimalEvent, IRoomEvent, IStateEvent, IStrippedState, ISyncResponse } from "./sync-accumulator";
-import { MatrixError } from "./http-api";
+    type SetPresence,
+} from "./sync.ts";
+import { type MatrixEvent } from "./models/event.ts";
 import {
-    Extension,
+    type IMinimalEvent,
+    type IRoomEvent,
+    type IStateEvent,
+    type IStrippedState,
+    type ISyncResponse,
+} from "./sync-accumulator.ts";
+import { MatrixError } from "./http-api/index.ts";
+import {
+    type Extension,
     ExtensionState,
-    MSC3575RoomData,
-    MSC3575SlidingSyncResponse,
-    SlidingSync,
+    type MSC3575RoomData,
+    type MSC3575SlidingSyncResponse,
+    type SlidingSync,
     SlidingSyncEvent,
     SlidingSyncState,
-} from "./sliding-sync";
-import { EventType } from "./@types/event";
-import { IPushRules } from "./@types/PushRules";
-import { RoomStateEvent } from "./models/room-state";
-import { RoomMemberEvent } from "./models/room-member";
-import { KnownMembership } from "./@types/membership";
+} from "./sliding-sync.ts";
+import { EventType } from "./@types/event.ts";
+import { type IPushRules } from "./@types/PushRules.ts";
+import { RoomStateEvent } from "./models/room-state.ts";
+import { RoomMemberEvent } from "./models/room-member.ts";
+import { KnownMembership } from "./@types/membership.ts";
 
 // Number of consecutive failed syncs that will lead to a syncState of ERROR as opposed
 // to RECONNECTING. This is needed to inform the client of server issues when the
@@ -66,7 +71,7 @@ type ExtensionE2EEResponse = Pick<
 >;
 
 class ExtensionE2EE implements Extension<ExtensionE2EERequest, ExtensionE2EEResponse> {
-    public constructor(private readonly crypto: Crypto) {}
+    public constructor(private readonly crypto: SyncCryptoCallbacks) {}
 
     public name(): string {
         return "e2ee";
@@ -373,8 +378,8 @@ export class SlidingSyncSdk {
             new ExtensionTyping(this.client),
             new ExtensionReceipts(this.client),
         ];
-        if (this.syncOpts.crypto) {
-            extensions.push(new ExtensionE2EE(this.syncOpts.crypto));
+        if (this.syncOpts.cryptoCallbacks) {
+            extensions.push(new ExtensionE2EE(this.syncOpts.cryptoCallbacks));
         }
         extensions.forEach((ext) => {
             this.slidingSync.registerExtension(ext);
@@ -612,7 +617,7 @@ export class SlidingSyncSdk {
             timelineEvents = newEvents;
             if (oldEvents.length > 0) {
                 // old events are scrollback, insert them now
-                room.addEventsToTimeline(oldEvents, true, room.getLiveTimeline(), roomData.prev_batch);
+                room.addEventsToTimeline(oldEvents, true, false, room.getLiveTimeline(), roomData.prev_batch);
             }
         }
 
@@ -754,7 +759,7 @@ export class SlidingSyncSdk {
     /**
      * Injects events into a room's model.
      * @param stateEventList - A list of state events. This is the state
-     * at the *START* of the timeline list if it is supplied.
+     * at the *END* of the timeline list if it is supplied.
      * @param timelineEventList - A list of timeline events. Lower index
      * is earlier in time. Higher index is later.
      * @param numLive - the number of events in timelineEventList which just happened,
@@ -763,13 +768,9 @@ export class SlidingSyncSdk {
     public async injectRoomEvents(
         room: Room,
         stateEventList: MatrixEvent[],
-        timelineEventList?: MatrixEvent[],
-        numLive?: number,
+        timelineEventList: MatrixEvent[] = [],
+        numLive: number = 0,
     ): Promise<void> {
-        timelineEventList = timelineEventList || [];
-        stateEventList = stateEventList || [];
-        numLive = numLive || 0;
-
         // If there are no events in the timeline yet, initialise it with
         // the given state events
         const liveTimeline = room.getLiveTimeline();
@@ -820,16 +821,17 @@ export class SlidingSyncSdk {
             timelineEventList = timelineEventList.slice(0, -1 * liveTimelineEvents.length);
         }
 
-        // execute the timeline events. This will continue to diverge the current state
-        // if the timeline has any state events in it.
+        // Execute the timeline events.
         // This also needs to be done before running push rules on the events as they need
         // to be decorated with sender etc.
         await room.addLiveEvents(timelineEventList, {
             fromCache: true,
+            addToState: false,
         });
         if (liveTimelineEvents.length > 0) {
             await room.addLiveEvents(liveTimelineEvents, {
                 fromCache: false,
+                addToState: false,
             });
         }
 
@@ -966,7 +968,7 @@ export class SlidingSyncSdk {
             return a.getTs() - b.getTs();
         });
         this.notifEvents.forEach((event) => {
-            this.client.getNotifTimelineSet()?.addLiveEvent(event);
+            this.client.getNotifTimelineSet()?.addLiveEvent(event, { addToState: false });
         });
         this.notifEvents = [];
     }
